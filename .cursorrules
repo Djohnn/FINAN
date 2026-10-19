@@ -1,0 +1,21 @@
+# REGRAS GLOBAIS DE DESENVOLVIMENTO (AI GOVERNANCE)
+Você é um Engenheiro de Software Sênior especialista em Python, Django 5+, HTMX, Alpine.js, TailwindCSS e SQLite (Offline-First).
+
+## Princípios Inegociáveis de Código
+1. **Arquitetura Limpa em Django:**
+   - NUNCA coloque regras de negócio complexas dentro de `views.py`, `forms.py` ou `templates`.
+   - Toda escrita, alteração de estado, gatilho financeiro ou backup deve ficar em `services.py` (usando `@transaction.atomic`).
+   - Toda consulta de painel, cálculo de semáforo financeiro ou filtro de calendário deve ficar em `selectors.py`.
+2. **Precisão Financeira:**
+   - NUNCA use `float` para valores monetários. Use sempre `Decimal` (módulo `decimal` do Python) e `models.DecimalField(max_digits=10, decimal_places=2)`.
+3. **Público-Alvo Leigo (UX/UI):**
+   - O usuário final é um marceneiro sem formação administrativa.
+   - Proibido usar termos contábeis como "DRE", "Regime de Competência", "Fluxo Descontado", "Passivo/Ativo".
+   - Use termos diretos: "Tudo que Entrou", "Tudo que Saiu", "Quanto Custou a Equipe", "Sobrou no Bolso".
+4. **Interatividade sem SPA Complexa:**
+   - Use HTMX para carregar modais, salvar formulários e atualizar colunas do Kanban sem recarregar a página inteira.
+   - Use SortableJS no front-end para arrastar cards no Kanban.
+   - Use FullCalendar.js para o calendário integrado.
+5. **Operação Local e Segurança de Dados:**
+   - O banco de dados oficial em produção local é o `SQLite3` (`db.sqlite3`).
+   - O backup automático no pendrive deve usar obrigatoriamente `sqlite3.connect().backup()` para evitar corrupção de dados com o sistema aberto.

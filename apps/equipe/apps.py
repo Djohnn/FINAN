@@ -1,0 +1,7 @@
+from django.apps import AppConfig
+
+
+class EquipeConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'apps.equipe'
+    verbose_name = 'Equipe & Funcionários'

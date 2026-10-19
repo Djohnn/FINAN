@@ -1,0 +1,104 @@
+from decimal import Decimal
+from django.db import models
+
+
+class LancamentoFinanceiro(models.Model):
+    """
+    Contas a pagar e receber unificadas da marcenaria.
+    Base de cálculo para o Semáforo Financeiro e Fechamento do Mês.
+    """
+    TIPO_CHOICES = [
+        ('ENTRADA', 'Entrada'),
+        ('SAIDA', 'Saída'),
+    ]
+
+    CATEGORIA_CHOICES = [
+        ('SERVICO_CLIENTE', 'Serviço de Cliente'),
+        ('FUNCIONARIO', 'Equipe / Funcionários'),
+        ('MATERIA_PRIMA', 'Matéria-Prima'),
+        ('CUSTO_FIXO_OFICINA', 'Custos Fixos da Oficina'),
+        ('OUTROS', 'Outros'),
+    ]
+
+    FORMA_PAGAMENTO_CHOICES = [
+        ('PIX', 'PIX'),
+        ('CARTAO_CREDITO', 'Cartão de Crédito'),
+        ('CARTAO_DEBITO', 'Cartão de Débito'),
+        ('DINHEIRO', 'Dinheiro'),
+        ('BOLETO', 'Boleto'),
+    ]
+
+    STATUS_CHOICES = [
+        ('PENDENTE', 'Pendente'),
+        ('PAGO', 'Pago'),
+        ('CANCELADO', 'Cancelado'),
+    ]
+
+    tipo = models.CharField(
+        max_length=10,
+        choices=TIPO_CHOICES,
+        db_index=True,
+        verbose_name="Tipo de Lançamento"
+    )
+    categoria = models.CharField(
+        max_length=30,
+        choices=CATEGORIA_CHOICES,
+        db_index=True,
+        verbose_name="Categoria"
+    )
+    projeto = models.ForeignKey(
+        'kanban_projetos.ProjetoKanban',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="lancamentos",
+        verbose_name="Projeto Relacionado"
+    )
+    funcionario = models.ForeignKey(
+        'equipe.Funcionario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pagamentos",
+        verbose_name="Funcionário Relacionado"
+    )
+    descricao = models.CharField(
+        max_length=200,
+        verbose_name="Descrição do Lançamento"
+    )
+    valor = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Valor (R$)"
+    )
+    forma_pagamento = models.CharField(
+        max_length=20,
+        choices=FORMA_PAGAMENTO_CHOICES,
+        default='PIX',
+        verbose_name="Forma de Pagamento"
+    )
+    data_vencimento = models.DateField(
+        db_index=True,
+        verbose_name="Data de Vencimento"
+    )
+    data_pagamento = models.DateField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="Data de Pagamento"
+    )
+    status = models.CharField(
+        max_length=15,
+        choices=STATUS_CHOICES,
+        default='PENDENTE',
+        db_index=True,
+        verbose_name="Status"
+    )
+
+    class Meta:
+        verbose_name = "Lançamento Financeiro"
+        verbose_name_plural = "Lançamentos Financeiros"
+        ordering = ["-data_vencimento", "-id"]
+
+    def __str__(self):
+        return f"[{self.get_tipo_display()}] {self.descricao} - R$ {self.valor}"
