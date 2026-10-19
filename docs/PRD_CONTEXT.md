@@ -3,6 +3,18 @@
 ## 1. Visão Geral do Produto
 Sistema web local para gerenciamento financeiro, operacional (Kanban) e comercial (Pós-venda e Orçamentos) de uma marcenaria. Deve rodar localmente no Windows e fazer backup diário automático em um pendrive configurado pelo usuário.
 
+## MODO DA V1 E DIREÇÃO FUTURA
+
+A V1 opera em modo `V1_PRODUCT_MODE=SINGLE_TENANT_LOCAL_SINGLE_USER`: uma única marcenaria por instalação local, com `LOGIN_REQUIRED=NO`, `AUTHORIZATION_LAYER_REQUIRED_IN_V1=NO`, `CURRENT_MULTI_TENANT_SCOPE=NO`, `CURRENT_DATABASE=SQLITE` e `POSTGRESQL_MIGRATION_NOW=NO`. Não são requisitos da V1 usuários de negócio, roles, permissões, tenant, organization, `tenant_id`, PostgreSQL, RLS ou autenticação obrigatória.
+
+A direção futura pode incluir múltiplos usuários, permissões diferentes, aplicação hospedada, PostgreSQL, multi-tenancy e SaaS. Esses itens são direção futura e não requisitos da V1; sua adoção exigirá desenho, implementação e validação próprios, sem promessa de migração sem esforço; `FUTURE_MULTI_USER_ALLOWED=YES` e `FUTURE_MULTI_TENANT_SAAS_ALLOWED=YES`.
+
+## GATE DE PROTÓTIPO VISUAL
+
+Para qualquer nova tela ou alteração visual relevante, `FRONTEND_PROTOTYPE_REQUIRED=YES`, `FOUNDER_VISUAL_APPROVAL_REQUIRED=YES` e `FRONTEND_IMPLEMENTATION_BEFORE_APPROVAL=PROHIBITED`. O fluxo obrigatório é: `REQUIREMENT` → `VISUAL_PROTOTYPE` → `FOUNDER_REVIEW` → `FOUNDER_EXPLICIT_APPROVAL` → `IMPLEMENTATION` → `IMPLEMENTED_VS_APPROVED_PROTOTYPE_COMPARISON` → `TESTS / AUDIT`.
+
+Silêncio do Founder não significa aprovação, e a implementação final deve ser comparada com o protótipo aprovado: `IMPLEMENTED_VS_APPROVED_PROTOTYPE_COMPARISON=REQUIRED`. A regra se aplica a layout/base, navegação, alertas, Kanban, modais, Geladeira, calendário, financeiro, equipe, configuração/backup e qualquer outro frontend relevante.
+
 ---
 
 ## 2. Módulos e Estrutura de Apps (Django)

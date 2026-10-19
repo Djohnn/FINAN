@@ -1,10 +1,14 @@
 # FINANEP — Governança, autorização e protocolo anti-alucinação
 
-**Status deste documento:** inventário e baseline documental; não autoriza implementação funcional.
+**Status deste documento:** inventário histórico e política operacional vigente; não autoriza implementação funcional por si só.
 
 **Data da inspeção:** 2026-10-19 (America/Sao_Paulo)
 
 ## 1. Escopo e evidência da inspeção
+
+### HISTORICAL_INSPECTION_STATE
+
+Os achados abaixo sobre `AGENTS.md`, Git, branch, worktree e SHA pertencem à inspeção original e devem ser preservados como histórico. Eles não descrevem o estado operacional atual desta worktree.
 
 Foram inspecionados:
 
@@ -17,6 +21,18 @@ Foram inspecionados:
 Não foi encontrado `AGENTS.md` no repositório. Não há `views.py`, `selectors.py`, `forms.py`, templates ou URLs de domínio na árvore inspecionada; `core_config/urls.py` expõe somente `/admin/`.
 
 O diretório não foi reconhecido como worktree Git nesta execução: `git status`, `git rev-parse HEAD` e `git branch --show-current` falharam com “not a git repository”. Portanto branch, worktree e SHA são **BLOQUEADOS / NÃO VERIFICADOS**, não podem ser inventados nem usados como identidade de mudança.
+
+### CURRENT_OPERATIONAL_STATE
+
+O estado operacional posterior à inspeção original, confirmado novamente na composição documental a partir de `2b34afbce433e3806daa23bef95a5725450c4a90`, é:
+
+- `GIT_INITIALIZED=YES`;
+- `MAIN_BRANCH=main`;
+- `REMOTE_REPOSITORY=Djohnn/FINAN`;
+- `AGENTS_MD_PRESENT=YES`;
+- `WORKTREE_GOVERNANCE_AVAILABLE=YES`.
+
+As afirmações históricas acima sobre ausência de `AGENTS.md` e Git não verificável permanecem como registro da inspeção original; não são bloqueios do estado atual.
 
 ### Classificações obrigatórias
 
@@ -61,7 +77,7 @@ O código atual viola ou ainda não consegue cumprir alguns limites apenas porqu
 
 ## 4. Autenticação, autorização e RLS
 
-### Estado confirmado
+### Estado confirmado na inspeção histórica
 
 - Django `auth`, `sessions`, `AuthenticationMiddleware` e `CsrfViewMiddleware` estão habilitados em `core_config/settings.py:33-57`.
 - O banco configurado é SQLite em `core_config/settings.py:83-87`.
@@ -69,11 +85,17 @@ O código atual viola ou ainda não consegue cumprir alguns limites apenas porqu
 - O único endpoint exposto é `/admin/` em `core_config/urls.py:20-22`; não há endpoints HTMX implementados.
 - SQLite não fornece RLS nativo. Não há middleware, backend de autorização, manager/queryset escopado ou proteção de acesso direto a registros confirmados na árvore.
 
+### Aplicabilidade atual da V1
+
+Por decisão explícita do Founder, `V1_PRODUCT_MODE=SINGLE_TENANT_LOCAL_SINGLE_USER`, `LOGIN_REQUIRED=NO`, `CURRENT_MULTI_TENANT_SCOPE=NO` e `CURRENT_DATABASE=SQLITE`. Portanto, `AUTHORIZATION_LAYER_REQUIRED_IN_V1=NO`. A ausência de camada de autorização inventariada historicamente não constitui, por si só, bloqueio da V1 local de usuário único. Isso não remove as proteções de dados aplicáveis nem significa que autorização nunca será necessária.
+
+Não implementar preventivamente tenant, `tenant_id`, `Organization`, PostgreSQL, RLS, autenticação obrigatória ou roles/permissões pela possibilidade futura de SaaS. `FUTURE_MULTI_USER_ALLOWED=YES` e `FUTURE_MULTI_TENANT_SAAS_ALLOWED=YES` são direção futura, sujeita a desenho, implementação e validação próprios; não há promessa de migração sem esforço.
+
 ### Política sem inventar privilégios
 
 Nenhum papel de negócio é criado ou presumido nesta baseline. `is_staff`, `is_superuser`, grupos e permissões Django só podem ser usados conforme evidência e aprovação explícita; não equivalem automaticamente a um papel operacional.
 
-Antes de expor qualquer ação web, o desenho aprovado deve definir, por ação:
+A prescrição histórica abaixo passa a ser exigida antes da exposição correspondente em futura evolução multiusuário/multi-tenant; não impõe login nem camada de autorização à V1 aprovada. Nesse desenho futuro, definir por ação:
 
 1. identidade autenticada e política de sessão;
 2. permissão mínima da ação;
@@ -82,7 +104,7 @@ Antes de expor qualquer ação web, o desenho aprovado deve definir, por ação:
 5. resposta de negação consistente, inclusive para requisições HTMX;
 6. teste positivo e teste de negação para cada ação sensível.
 
-Qualquer mudança que altere comportamento de autorização exige aprovação antes da implementação. A ausência de RLS em SQLite deve ser compensada por controles Django explícitos, mas isso é uma proposta de desenho, não uma prova de que o controle já existe.
+Qualquer mudança que altere comportamento de autorização exige aprovação antes da implementação. No desenho futuro que exigir isolamento, a ausência de RLS em SQLite exige controles explícitos na aplicação, sem inventar RLS nativo para SQLite. Isso é requisito de desenho futuro, não prova de controle existente nem exigência preventiva para a V1.
 
 ### Migração futura para PostgreSQL
 
@@ -94,7 +116,10 @@ Os papéis abaixo são papéis de processo, não papéis de usuário do sistema:
 
 - **Executor:** altera somente os arquivos explicitamente autorizados, consulta Graphify antes de editar, preserva dados/migrations e para diante de escopo ambíguo, segredo exposto, divergência arquitetural ou falta de autorização.
 - **Revisor independente:** reproduz a evidência a partir do estado identificado, revisa diff e critérios de aceite sem aceitar alegação do executor como prova; não altera o escopo para fazer o resultado passar.
-- **Coordenador:** define escopo e gates, registra decisões, resolve divergências somente com aprovação e consolida o checkpoint. Agenda não é autorização.
+- **COORDINATOR (Coordenador):** define escopo e gates, revisa criticamente o relatório do auditor, decide `AUDIT_VALIDATED=YES/NO`, decide a promoção ou não do estado e a próxima ação técnica. Registra decisões e resolve divergências de regra de negócio somente com aprovação do Founder; não substitui a persistência exclusiva pelo Scheduler. Agenda não é autorização.
+- **AUDITOR (Revisor independente):** produz evidência independente; não promove candidato sozinho e não escreve checkpoint canônico.
+- **CHECKPOINT_SCHEDULER:** inspeciona o estado real, reconcilia o histórico e escreve exclusivamente `docs/PROJECT_STATE.md`; não implementa, não corrige, não audita produto, não decide regra de negócio e não integra branches.
+- **IMPLEMENTERS e demais agentes:** não editam `docs/PROJECT_STATE.md`.
 
 Contrato mínimo de entrega: resumo; arquivos e linhas; estado antes/depois; comandos completos; saída bruta; classificação de cada resultado; decisões; pendências; riscos; próximo passo. Um teste sem saída do runner não é prova de passagem.
 
@@ -111,7 +136,7 @@ Sem Git verificável, o estado deve ser **BLOQUEADO** para qualquer operação q
 Uma etapa só pode ser liberada quando os gates aplicáveis tiverem evidência independente:
 
 1. revisão arquitetural e escopo;
-2. segurança: autenticação, autorização por ação, escopo de queryset, negação por ID e HTMX;
+2. segurança conforme o modo aprovado: na evolução multiusuário/multi-tenant, autenticação, autorização por ação, escopo de queryset, negação por ID e HTMX; sem exigir camada de autorização ou login na V1 local de usuário único;
 3. testes Django focados e regressão;
 4. `manage.py check`, migrations sem drift e execução autorizada das migrations;
 5. `ruff` e `mypy` limpos no runtime declarado;
@@ -120,18 +145,60 @@ Uma etapa só pode ser liberada quando os gates aplicáveis tiverem evidência i
 8. conformidade com PRD e schema, com divergências registradas;
 9. revisão independente do diff e do relatório.
 
-No baseline atual, `manage.py check` passou; `makemigrations --check --dry-run` informou “No changes detected”; `manage.py test --verbosity 2` executou 7 testes e terminou `OK` em 0,113 s. `ruff` e `mypy` não foram encontrados no PATH. Esses resultados não são PASS de autorização, RLS, HTMX, release ou conformidade integral.
+No baseline da inspeção histórica, `manage.py check` passou; `makemigrations --check --dry-run` informou “No changes detected”; `manage.py test --verbosity 2` executou 7 testes e terminou `OK` em 0,113 s. `ruff` e `mypy` não foram encontrados no PATH. Esses resultados não são PASS de autorização, RLS, HTMX, release ou conformidade integral.
 
-## 8. Checkpoint reproduzível
+## 8. Política canônica de checkpoint
 
-Cada checkpoint deve conter, em formato append-only:
+- `CHECKPOINT_FILE=docs/PROJECT_STATE.md`;
+- `CHECKPOINT_WRITER_COUNT=1`;
+- `CANONICAL_CHECKPOINT_WRITER=FINANPE-CHECKPOINT-SCHEDULER-012`;
+- `CHECKPOINT_BLOCKS_PROGRESS=NO`;
+- `CHECKPOINT_REMAINS_MANDATORY=YES`.
 
-`CHECKPOINT_ID`, data/hora e timezone, repositório/caminho, branch/worktree, SHA, escopo, estado antes/depois, decisões aprovadas, fontes consultadas, comandos e saídas, gates por classificação, pendências, riscos, bloqueios, `NEXT_ACTION`, `NEXT_AGENT`, autorização necessária e `STOP_CONDITION`.
+**O Coordenador decide o estado; o auditor produz evidência; o Scheduler persiste o estado. Nenhum substitui o outro.**
+
+### Target canônico e candidato
+
+`LAST_CANONICAL_INDEPENDENTLY_AUDITED_SHA` é diferente de `CURRENT_CANDIDATE_SHA`: o primeiro identifica o último target canônico auditado independentemente; o segundo identifica o candidato atual. Implementação sozinha não promove target. Quando auditoria independente for gate obrigatório, candidato somente vira canônico após `INDEPENDENT_AUDIT` → `COORDINATOR_VALIDATION`. `IMPLEMENTER=PASS` não equivale a `CANONICAL_TARGET`.
+
+### Histórico e reconciliação
+
+`CHECKPOINT HISTORY` é append-only: IDs únicos e sequenciais; não renumerar histórico, não apagar FAIL antigo após PASS posterior e não reescrever o passado. Ausência de checkpoint exige reconciliação pelo Scheduler, criando somente checkpoints faltantes, sem duplicação.
+
+Prompt enviado não prova execução; relatório recebido não prova persistência. Git continua sendo prova de código/target; checkpoint não substitui Git nem auditoria.
+
+Cada checkpoint deve conter: `CHECKPOINT_ID`, data/hora e timezone, repositório/caminho, branch/worktree, SHA, escopo, estado antes/depois, decisões aprovadas, fontes consultadas, comandos e saídas, gates por classificação, pendências, riscos, bloqueios, `NEXT_ACTION`, `NEXT_AGENT`, autorização necessária e `STOP_CONDITION`.
 
 O checkpoint não pode transformar “não verificado” em “passou”, nem fechar uma pendência técnica sem evidência do gate correspondente. O próximo agente deve conseguir repetir os comandos no mesmo estado ou declarar a diferença de ambiente.
 
+### Contradição objetiva
+
+`CONTRADICTION=YES` somente quando houver incompatibilidade objetiva de estado, por exemplo: SHA real diferente do registrado; PASS registrado onde a auditoria validada foi FAIL; decisão do Founder invertida; candidato não auditado promovido a canônico; checkpoint duplicado incompatível.
+
+Não usar `CONTRADICTION` para estilo, warning, formatação, nomenclatura ou diferença descritiva sem impacto de estado. Contradição real pode interromper progressão e exigir reconciliação antes da continuidade.
+
+### Checkpoint obrigatório e não bloqueante
+
+Após auditoria validada, o fluxo é:
+
+```text
+AUDITORIA VALIDADA
+├── Scheduler registra checkpoint
+└── Coordenador libera próximo gate técnico
+```
+
+Essas ações podem ocorrer em paralelo. O checkpoint permanece obrigatório, mas não deve criar espera burocrática. Somente `CONTRADICTION` real de estado pode exigir reconciliação antes da continuidade; a falta isolada de persistência não bloqueia o próximo gate técnico.
+
+### Gate visual obrigatório
+
+Para qualquer frontend novo ou mudança visual relevante: `FRONTEND_PROTOTYPE_REQUIRED=YES`, `FOUNDER_VISUAL_APPROVAL_REQUIRED=YES` e `FRONTEND_IMPLEMENTATION_BEFORE_APPROVAL=PROHIBITED`.
+
+Fluxo obrigatório: `REQUIREMENT` → `VISUAL_PROTOTYPE` → `FOUNDER_REVIEW` → `FOUNDER_EXPLICIT_APPROVAL` → `IMPLEMENTATION` → `IMPLEMENTED_VS_APPROVED_PROTOTYPE_COMPARISON` → `TESTS / AUDIT`.
+
+Silêncio do Founder não significa aprovação. Depois da implementação, `IMPLEMENTED_VS_APPROVED_PROTOTYPE_COMPARISON=REQUIRED`.
+
 ## 9. Lacunas desta inspeção e próximos passos autorizáveis
 
-Lacunas confirmadas: ausência de governança formal além de `.cursorrules`; ausência de camada web; ausência de autorização por ação e escopo; ausência de testes de negação/HTMX; ausência de `ruff`/`mypy`; ausência de identidade Git verificável; ausência de prova de RLS PostgreSQL; ausência de registro de auditoria/idempotency key nos services observados.
+Lacunas confirmadas na inspeção histórica: ausência de governança formal além de `.cursorrules`; ausência de camada web; ausência de autorização por ação e escopo; ausência de testes de negação/HTMX; ausência de `ruff`/`mypy`; ausência de identidade Git verificável naquele ambiente; ausência de prova de RLS PostgreSQL; ausência de registro de auditoria/idempotency key nos services observados.
 
-O próximo passo seguro é uma decisão de escopo e autorização para desenhar, em documento separado ou alteração aprovada, o modelo de usuários/ações/escopos. Não iniciar implementação de autorização, endpoints, migrations, PostgreSQL ou Passo 4 com base somente neste inventário.
+A recomendação da inspeção original era obter decisão de escopo e autorização para desenhar o modelo de usuários/ações/escopos. A decisão posterior do Founder aprovou a V1 local de usuário único sem login; esse desenho de autorização fica condicionado à evolução futura correspondente e não bloqueia, por si só, a V1. O inventário histórico não autoriza implementar endpoints, migrations, PostgreSQL ou Passo 4; qualquer frontend novo ou mudança visual relevante depende do gate visual acima. O estado operacional e os checkpoints faltantes serão reconciliados exclusivamente pelo Scheduler, sem edição de `docs/PROJECT_STATE.md` nesta composição.
