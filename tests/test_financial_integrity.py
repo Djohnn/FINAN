@@ -18,10 +18,13 @@ from apps.kanban_projetos.services import (
 class FinancialIntegrityTests(TestCase):
     def setUp(self):
         cliente = Cliente.objects.create(nome='Integridade', whatsapp='11999999999')
-        self.projeto = ProjetoKanban.objects.create(
-            cliente=cliente, titulo_servico='Projeto teste', etapa='2_ORCAMENTO',
-        )
         self.hoje = timezone.localdate()
+        self.projeto = ProjetoKanban.objects.create(
+            cliente=cliente,
+            titulo_servico='Projeto teste',
+            etapa='2_ORCAMENTO',
+            data_limite_orcamento=self.hoje,
+        )
         self.kwargs = {
             'projeto_id': self.projeto.pk,
             'valor_total': Decimal('10.00'),
@@ -37,7 +40,10 @@ class FinancialIntegrityTests(TestCase):
         for saldo, quantidade in [('0.03', 5), ('0.01', 2)]:
             with self.subTest(saldo=saldo):
                 projeto = ProjetoKanban.objects.create(
-                    cliente=self.projeto.cliente, titulo_servico='Invalido', etapa='2_ORCAMENTO',
+                    cliente=self.projeto.cliente,
+                    titulo_servico='Invalido',
+                    etapa='2_ORCAMENTO',
+                    data_limite_orcamento=self.hoje,
                 )
                 estado = ProjetoKanban.objects.values().get(pk=projeto.pk)
                 with self.assertRaises(ValidationError):
@@ -54,7 +60,10 @@ class FinancialIntegrityTests(TestCase):
         for saldo, quantidade in [('0.08', 5), ('10.00', 3), ('0.05', 5)]:
             with self.subTest(saldo=saldo):
                 projeto = ProjetoKanban.objects.create(
-                    cliente=self.projeto.cliente, titulo_servico='Residual', etapa='2_ORCAMENTO',
+                    cliente=self.projeto.cliente,
+                    titulo_servico='Residual',
+                    etapa='2_ORCAMENTO',
+                    data_limite_orcamento=self.hoje,
                 )
                 aprovar_orcamento_service(**{
                     **self.kwargs, 'projeto_id': projeto.pk,

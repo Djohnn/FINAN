@@ -2,6 +2,7 @@ import re
 from decimal import Decimal
 from urllib.parse import quote
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -115,6 +116,15 @@ class ProjetoKanban(models.Model):
     def __str__(self):
         return f"{self.titulo_servico} - {self.cliente.nome} ({self.get_etapa_display()})"
 
+    def clean(self):
+        super().clean()
+        if self.etapa == '2_ORCAMENTO' and self.data_limite_orcamento is None:
+            raise ValidationError({
+                'data_limite_orcamento': (
+                    'A etapa 2_ORCAMENTO exige uma data limite do orçamento.'
+                ),
+            })
+
     def save(self, *args, **kwargs):
         """Persiste o card sem alterar o valor contratado ou o saldo financeiro.
 
@@ -123,6 +133,7 @@ class ProjetoKanban(models.Model):
         valor_total - valor_entrada apagaria pagamentos efetivos quando um
         card fosse salvo por outro fluxo.
         """
+        self.clean()
         super().save(*args, **kwargs)
 
     @property
