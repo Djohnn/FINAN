@@ -1,6 +1,7 @@
 from datetime import timedelta
 from io import StringIO
 from pathlib import Path
+import re
 from unittest.mock import patch
 
 from django.core.management import call_command
@@ -157,3 +158,12 @@ class BackupAutomationTests(TestCase):
         self.assertNotIn('django_secret_key =', normalized)
         self.assertNotIn('setenvironmentvariable', normalized)
         self.assertNotIn('test-only-backup-automation-016', normalized)
+
+    def test_task_installer_uses_supported_interactive_logon_type(self):
+        installer = Path(
+            'scripts_windows/Instalar_Backup_Automatico.ps1',
+        ).read_text(encoding='utf-8')
+        logon_types = re.findall(r'-LogonType\s+([A-Za-z]+)', installer)
+
+        self.assertEqual(logon_types, ['Interactive'])
+        self.assertNotIn('-LogonType InteractiveToken', installer)

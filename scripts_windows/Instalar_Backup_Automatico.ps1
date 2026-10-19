@@ -34,7 +34,7 @@ $settings = New-ScheduledTaskSettingsSet `
     -RestartInterval (New-TimeSpan -Minutes 15)
 $principal = New-ScheduledTaskPrincipal `
     -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) `
-    -LogonType InteractiveToken `
+    -LogonType Interactive `
     -RunLevel Limited
 
 Register-ScheduledTask `
