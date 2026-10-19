@@ -15,7 +15,7 @@ def alertas_globais(request):
         data_limite_orcamento__lte=hoje,
     ).select_related('cliente'))
     contatos_pendentes = list(AgendaContato.objects.filter(
-        tipo__in=('POS_VENDA_30_DIAS', 'RETORNO_ORCAMENTO'),
+        tipo__in=('POS_VENDA_30_DIAS', 'RETORNO_ORCAMENTO', 'LIGACAO_MANUAL'),
         realizado=False,
         data_agendada__lte=hoje,
     ).select_related('cliente', 'projeto'))

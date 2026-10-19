@@ -29,10 +29,19 @@ def concluir_pos_venda_service(
             'nivel_satisfacao': "O nível de satisfação é obrigatório para concluir o pós-venda."
         })
 
+    nivel_satisfacao_normalizado = str(nivel_satisfacao).strip()
+    valid_satisfactions = {
+        value for value, _label in AgendaContato.SATISFACAO_CHOICES
+    }
+    if nivel_satisfacao_normalizado not in valid_satisfactions:
+        raise ValidationError({
+            'nivel_satisfacao': "O nível de satisfação informado é inválido."
+        })
+
     agenda.realizado = True
     agenda.realizado_em = timezone.now()
     agenda.feedback_cliente = feedback_cliente.strip()
-    agenda.nivel_satisfacao = str(nivel_satisfacao).strip()
+    agenda.nivel_satisfacao = nivel_satisfacao_normalizado
     agenda.save()
 
     return agenda

@@ -95,6 +95,14 @@ class AgendaContato(models.Model):
 
     def clean(self):
         super().clean()
+        valid_satisfactions = {
+            value for value, _label in self.SATISFACAO_CHOICES
+        }
+        if self.nivel_satisfacao and self.nivel_satisfacao not in valid_satisfactions:
+            raise ValidationError({
+                'nivel_satisfacao': "O nível de satisfação informado é inválido."
+            })
+
         if self.realizado:
             # feedback_cliente deve ter no mínimo 10 caracteres sem contar espaços
             texto_sem_espacos = "".join((self.feedback_cliente or "").split())
