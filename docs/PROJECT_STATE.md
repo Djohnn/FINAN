@@ -11,23 +11,28 @@ CHECKPOINT_REMAINS_MANDATORY=YES
 CURRENT_PROJECT=FinanPE
 CURRENT_FRONT=foundation-remediation-before-frontend
 CURRENT_PHASE=backend-and-operational-gap-remediation
-CURRENT_GATE=backup-automation-remediation-next
+CURRENT_GATE=backup-runtime-activation-pending
 
-CURRENT_CANONICAL_TARGET=4b3cfb9bb91951a71fdc64dd4ac519504dde5b18
+CURRENT_CANONICAL_TARGET=b1b4d54dc7a2ac6ed98582426e053b75b61ff187
 CURRENT_CANDIDATE_TARGET=NONE
-LAST_CANONICAL_INDEPENDENTLY_AUDITED_SHA=4b3cfb9bb91951a71fdc64dd4ac519504dde5b18
+LAST_CANONICAL_INDEPENDENTLY_AUDITED_SHA=b1b4d54dc7a2ac6ed98582426e053b75b61ff187
 CURRENT_CANDIDATE_SHA=NONE
 
-LAST_VALIDATED_AUDIT=FINANPE-GOVERNANCE-COMPOSITION-AUDITOR-015
+LAST_VALIDATED_AUDIT=FINANPE-BACKUP-AUTOMATION-AUDITOR-018
 LAST_VALIDATED_AUDIT_RESULT=PASS
 
 ACTIVE_AGENT=NONE
-WAITING_FOR=NONE
+WAITING_FOR=FOUNDER_APPROVAL_FOR_REAL_WINDOWS_TASK_REGISTRATION
 
-MAIN_BLOCKER=NONE preventing controlled continuation
-NEXT_SAFE_ACTION=implement and independently audit automatic daily backup operation; frontend remains blocked on visual prototype and explicit Founder approval
+MAIN_BLOCKER=NONE preventing code continuation
+NEXT_SAFE_ACTION=activate and validate the real Windows backup scheduled task using the integrated installer; after runtime activation, continue remaining backend service gaps; frontend remains gated by prototype and explicit Founder approval
 
-READY_FOR_RUNTIME=NO
+BACKUP_AUTOMATION_CODE_IMPLEMENTED=YES
+BACKUP_AUTOMATION_CODE_AUDITED=YES
+REAL_WINDOWS_TASK_REGISTERED=NO
+BACKUP_RUNTIME_ACTIVATION_PENDING=YES
+
+READY_FOR_RUNTIME=YES_FOR_BACKUP_TASK_ACTIVATION_ONLY
 READY_FOR_ARTIFACT=NO
 READY_FOR_FOUNDER_QA=NO
 PROJECT_CLOSED=NO
@@ -54,19 +59,19 @@ KNOWN_NONBLOCKERS=
 
 OPEN_BLOCKERS=NONE preventing controlled continuation
 OPEN_GAPS=
-- automatic daily backup execution not yet closed;
+- real Windows backup scheduled task not yet registered/validated;
 - backup visual alert not yet implemented;
 - remaining service gaps from audit 008;
 - monthly financial closing not implemented;
 - domain frontend not implemented;
 - frontend requires approved prototype before implementation.
 
-CHECKPOINT_COUNT=6
-CHECKPOINT_LAST_ID=PSC-2026-10-19-006
+CHECKPOINT_COUNT=8
+CHECKPOINT_LAST_ID=PSC-2026-10-19-008
 
 ## CHECKPOINT HISTORY
 
-History is append-only. The six checkpoints below were composed directly on BASE_SHA after rejecting the previous candidate for chronology only. The rejected candidate was not cherry-picked, amended, reset, or integrated.
+History is append-only. Checkpoints 001–006 were established during the prior chronology reconciliation. Checkpoints 007–008 were appended after backup automation audit/re-audit. Rejected checkpoint candidates were not integrated into main.
 
 ### PSC-2026-10-19-001 — Baseline Git validado
 
@@ -249,20 +254,111 @@ PARALLEL_CHECKPOINT_WRITER=FINANPE-CHECKPOINT-SCHEDULER-012
 NEXT_AGENT=FINANPE-BACKUP-AUTOMATION-IMPLEMENTER-016
 STOP_CONDITION=não registrar o trabalho do 016 como concluído sem auditoria validada; parar diante de alteração fora de docs/PROJECT_STATE.md ou tentativa de push/integração não autorizada.
 
+### PSC-2026-10-19-007 — Auditoria de automação de backup: HOLD de proveniência
+
+CHECKPOINT_ID=PSC-2026-10-19-007
+CHECKPOINT_DATE=2026-10-19
+CHECKPOINT_TIMEZONE=America/Sao_Paulo
+REPOSITORY=C:\desenvolvimento\FinanEP
+AUDIT_AGENT=FINANPE-BACKUP-AUTOMATION-AUDITOR-018
+RESULT=HOLD
+TARGET=5f9d15692c802b0f1550e9d877d45dd2aa84b581
+PARENT=4b3cfb9bb91951a71fdc64dd4ac519504dde5b18
+
+PROVEN=
+- helper de backup de hoje válido;
+- --if-due válido;
+- request path sem backup I/O;
+- status de backup válido;
+- launcher Windows válido;
+- Task Scheduler hourly e repetindo entre dias;
+- retry após falha;
+- máximo de um backup bem-sucedido por dia;
+- lock preservado;
+- secret não exposto;
+- PowerShell parse PASS;
+- BASE regressivo RED;
+- TARGET com 11 testes focados PASS;
+- suíte total 23 PASS;
+- Django check PASS;
+- migration drift NO;
+- banco real inalterado.
+
+SOURCE_MAIN_SHA=f3c83bc34b7e11bd9ce63771ba1fd78b3887d2f7
+SOURCE_MAIN_EXPECTED=4b3cfb9bb91951a71fdc64dd4ac519504dde5b18
+CAUSE=main havia avançado por commit documental de PROJECT_STATE.
+FUNCTIONAL_DEFECT_FOUND=NO
+PRODUCT_BLOCKER=NO
+DATA_INTEGRITY_BLOCKER=NO
+OPERATIONAL_DEFECT_FOUND=NO
+PROVENANCE_BLOCKER=YES
+HOLD_REASON=proveniência do target auditado não correspondia ao main esperado.
+CANONICAL_PROMOTION=NO
+STATE_EFFECT=HOLD exclusivamente de proveniência; as evidências funcionais positivas foram preservadas.
+NEXT_ACTION=reaplicar exatamente os blobs auditados sobre o main atual e reauditar proveniência/regressão.
+NEXT_AGENT=FINANPE-BACKUP-AUTOMATION-IMPLEMENTER-016
+STOP_CONDITION=não promover o target enquanto a proveniência do código auditado e a regressão sobre o main atual não forem revalidadas.
+
+### PSC-2026-10-19-008 — Reauditoria de automação de backup validada
+
+CHECKPOINT_ID=PSC-2026-10-19-008
+CHECKPOINT_DATE=2026-10-19
+CHECKPOINT_TIMEZONE=America/Sao_Paulo
+REPOSITORY=C:\desenvolvimento\FinanEP
+AUDIT_AGENT=FINANPE-BACKUP-AUTOMATION-AUDITOR-018
+RESULT=PASS
+TARGET=b1b4d54dc7a2ac6ed98582426e053b75b61ff187
+PARENT=f3c83bc34b7e11bd9ce63771ba1fd78b3887d2f7
+REFERENCE_AUDITED_TARGET=5f9d15692c802b0f1550e9d877d45dd2aa84b581
+
+PROVEN=
+- seis arquivos funcionais autorizados;
+- todos os seis blobs byte-identical ao target anteriormente auditado;
+- PROJECT_STATE preservado;
+- HOLD anterior de proveniência resolvido;
+- 11/11 testes focados PASS;
+- 23/23 testes totais PASS;
+- Django check PASS;
+- migration drift NO;
+- PowerShell parse PASS;
+- Task Scheduler configurado em código para HOURLY;
+- repetição atravessa dias;
+- retry após falha preservado;
+- no máximo um backup bem-sucedido por dia;
+- secret não exposto;
+- banco real inalterado;
+- ruff/mypy continuam known nonblockers.
+
+STATE_BEFORE=PSC-2026-10-19-007 permanecia HOLD exclusivamente por proveniência, sem defeito funcional, produto, dados ou operação.
+COORDINATOR_AUDIT_VALIDATED=YES
+FOUNDER_INTEGRATION_APPROVAL=EXPLICIT
+INTEGRATION=FAST_FORWARD_TO_MAIN_CONFIRMED
+REMOTE_MAIN=b1b4d54dc7a2ac6ed98582426e053b75b61ff187
+STATE_EFFECT=promover TARGET a último target canônico independentemente auditado.
+BACKUP_AUTOMATION_CODE_IMPLEMENTED=YES
+BACKUP_AUTOMATION_CODE_AUDITED=YES
+REAL_WINDOWS_TASK_REGISTERED=NO
+BACKUP_RUNTIME_ACTIVATION_PENDING=YES
+NEXT_ACTION=activate and validate the real Windows backup scheduled task using the integrated installer; after runtime activation, continue remaining backend service gaps; frontend remains gated by prototype and explicit Founder approval
+NEXT_AGENT=NONE_FOUNDER_CONTROLLED_RUNTIME_ACTIVATION
+STOP_CONDITION=não declarar a tarefa Windows real instalada ou validada sem registro e validação no ambiente do Founder.
+
 ## RECONCILIATION RECORD
 
 RECONCILIATION_AGENT=FINANPE-CHECKPOINT-SCHEDULER-012
-RECONCILIATION_BASE_SHA=4b3cfb9bb91951a71fdc64dd4ac519504dde5b18
-RECONCILIATION_BRANCH=docs/checkpoint-scheduler-012-r3
-RECONCILIATION_WORKTREE=C:\desenvolvimento\FinanEP.worktrees\checkpoint-scheduler-012-r3
-REJECTED_REFERENCE_CANDIDATE=b0b7f2f14ca08dd0a61bb1a6d4515685b00df384
+RECONCILIATION_BASE_SHA=b1b4d54dc7a2ac6ed98582426e053b75b61ff187
+RECONCILIATION_BRANCH=docs/checkpoint-scheduler-012-r5
+RECONCILIATION_WORKTREE=C:\desenvolvimento\FinanEP.worktrees\checkpoint-scheduler-012-r5
+REJECTED_REFERENCE_CANDIDATE=ee78dee18fde13cb0e11690f5f765ba9ca257548
 REJECTED_REFERENCE_CHERRY_PICKED=NO
 REJECTED_CANDIDATE_VALIDATED=NO
-REJECTED_CANDIDATE_CONTRADICTION=YES_CHRONOLOGY_ONLY
+REJECTED_CANDIDATE_REASON=STALE_HISTORY_COUNT_TEXT
 INTEGRATE_REJECTED_CANDIDATE=NO
 HISTORY_SOURCE=semantic reuse only; clean composition directly on BASE_SHA
+CHECKPOINT_007_CREATED=YES
+CHECKPOINT_008_CREATED=YES
 HISTORICAL_CHRONOLOGY_CORRECTED=YES
 NO_DUPLICATE_CHECKPOINTS=YES
 CHECKPOINT_IDS_SEQUENTIAL=YES
-CONTRADICTION=NO_AFTER_CORRECTION
+CONTRADICTION=NO
 HISTORY_RECONCILED=YES
