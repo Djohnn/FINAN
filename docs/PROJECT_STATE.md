@@ -11,28 +11,33 @@ CHECKPOINT_REMAINS_MANDATORY=YES
 CURRENT_PROJECT=FinanPE
 CURRENT_FRONT=foundation-remediation-before-frontend
 CURRENT_PHASE=backend-and-operational-gap-remediation
-CURRENT_GATE=backup-runtime-activation-pending
+CURRENT_GATE=remaining-backend-service-integrity-gaps
 
-CURRENT_CANONICAL_TARGET=b1b4d54dc7a2ac6ed98582426e053b75b61ff187
+CURRENT_CANONICAL_TARGET=b0737c7338de8949528a266227d9809333d0863c
 CURRENT_CANDIDATE_TARGET=NONE
 LAST_CANONICAL_INDEPENDENTLY_AUDITED_SHA=b1b4d54dc7a2ac6ed98582426e053b75b61ff187
 CURRENT_CANDIDATE_SHA=NONE
 
 LAST_VALIDATED_AUDIT=FINANPE-BACKUP-AUTOMATION-AUDITOR-018
-LAST_VALIDATED_AUDIT_RESULT=PASS
+LAST_VALIDATED_AUDIT_RESULT=HOLD_ENVIRONMENTAL
+LATEST_INDEPENDENT_AUDIT_TARGET=b0737c7338de8949528a266227d9809333d0863c
+LATEST_INDEPENDENT_AUDIT_RESULT=HOLD_ENVIRONMENTAL
+LATEST_COORDINATOR_VALIDATION_RESULT=PASS
+CURRENT_CANONICAL_TARGET_VALIDATION_MODE=COORDINATOR_VALIDATED_WITH_FOUNDER_HOST_RUNTIME_EVIDENCE
 
 ACTIVE_AGENT=NONE
-WAITING_FOR=FOUNDER_APPROVAL_FOR_REAL_WINDOWS_TASK_REGISTRATION
+WAITING_FOR=NONE
 
-MAIN_BLOCKER=NONE preventing code continuation
-NEXT_SAFE_ACTION=activate and validate the real Windows backup scheduled task using the integrated installer; after runtime activation, continue remaining backend service gaps; frontend remains gated by prototype and explicit Founder approval
+MAIN_BLOCKER=NONE preventing controlled continuation
+NEXT_SAFE_ACTION=remediate employee payment quantity validation so zero/non-positive worked periods cannot silently become one paid period; independently audit the fix before integration; then continue remaining backend service gaps; frontend remains gated by prototype and explicit Founder approval
 
 BACKUP_AUTOMATION_CODE_IMPLEMENTED=YES
-BACKUP_AUTOMATION_CODE_AUDITED=YES
-REAL_WINDOWS_TASK_REGISTERED=NO
-BACKUP_RUNTIME_ACTIVATION_PENDING=YES
+BACKUP_AUTOMATION_CODE_VALIDATED=YES
+BACKUP_RUNTIME_OPERATIONAL=YES
+REAL_WINDOWS_TASK_REGISTERED=YES
+BACKUP_RUNTIME_ACTIVATION_PENDING=NO
 
-READY_FOR_RUNTIME=YES_FOR_BACKUP_TASK_ACTIVATION_ONLY
+READY_FOR_RUNTIME=YES_FOR_BACKUP_RUNTIME_ONLY
 READY_FOR_ARTIFACT=NO
 READY_FOR_FOUNDER_QA=NO
 PROJECT_CLOSED=NO
@@ -59,19 +64,19 @@ KNOWN_NONBLOCKERS=
 
 OPEN_BLOCKERS=NONE preventing controlled continuation
 OPEN_GAPS=
-- real Windows backup scheduled task not yet registered/validated;
-- backup visual alert not yet implemented;
+- backup visual alert/frontend not yet implemented;
 - remaining service gaps from audit 008;
 - monthly financial closing not implemented;
 - domain frontend not implemented;
-- frontend requires approved prototype before implementation.
+- frontend requires approved prototype before implementation;
+- employee payment quantity validation is next backend integrity gap.
 
-CHECKPOINT_COUNT=8
-CHECKPOINT_LAST_ID=PSC-2026-10-19-008
+CHECKPOINT_COUNT=10
+CHECKPOINT_LAST_ID=PSC-2026-10-19-010
 
 ## CHECKPOINT HISTORY
 
-History is append-only. Checkpoints 001–006 were established during the prior chronology reconciliation. Checkpoints 007–008 were appended after backup automation audit/re-audit. Rejected checkpoint candidates were not integrated into main.
+History is append-only. Checkpoints 001–006 were established during the prior chronology reconciliation. Later checkpoints append validated remediation, audit and runtime events. Rejected checkpoint candidates were not integrated into main.
 
 ### PSC-2026-10-19-001 — Baseline Git validado
 
@@ -343,12 +348,147 @@ NEXT_ACTION=activate and validate the real Windows backup scheduled task using t
 NEXT_AGENT=NONE_FOUNDER_CONTROLLED_RUNTIME_ACTIVATION
 STOP_CONDITION=não declarar a tarefa Windows real instalada ou validada sem registro e validação no ambiente do Founder.
 
+### PSC-2026-10-19-009 — Auditoria do fix de runtime: HOLD ambiental
+
+CHECKPOINT_ID=PSC-2026-10-19-009
+CHECKPOINT_DATE=2026-10-19
+CHECKPOINT_TIMEZONE=America/Sao_Paulo
+REPOSITORY=C:\desenvolvimento\FinanEP
+AUDIT_AGENT=FINANPE-BACKUP-AUTOMATION-AUDITOR-018
+RESULT=HOLD
+HOLD_CLASSIFICATION=ENVIRONMENT_ONLY
+TARGET=b0737c7338de8949528a266227d9809333d0863c
+PARENT=7f03ff946f4981e8d414eabb6ead08596a9aa88f
+
+PROVEN=
+- TARGET existe e parent correto;
+- exatamente dois arquivos alterados: scripts_windows/Instalar_Backup_Automatico.ps1 e tests/test_backup_automation.py;
+- PROJECT_STATE não mudou;
+- defeito do BASE reproduzido: InteractiveToken falha;
+- TARGET usa Interactive;
+- InteractiveToken removido como LogonType;
+- teste regressivo presente e suficientemente exato;
+- desenho restante da tarefa preservado;
+- PowerShell parse PASS;
+- 12 testes focados PASS;
+- 24 testes totais PASS;
+- Django check PASS;
+- migration drift NO;
+- diff check PASS;
+- banco real inalterado;
+- nenhum defeito funcional, de produto ou integridade de dados encontrado.
+
+TARGET_INTERACTIVE_BINDING=BLOCKED_ENVIRONMENT_CIM
+TASK_COUNT_BEFORE=UNVERIFIED_ACCESS_DENIED
+TASK_COUNT_AFTER=UNVERIFIED_ACCESS_DENIED
+ENVIRONMENT_BLOCKER=YES
+FUNCTIONAL_DEFECT_FOUND=NO
+PRODUCT_BLOCKER=NO
+DATA_INTEGRITY_BLOCKER=NO
+CODE_FIX_REJECTED=NO
+CANONICAL_PROMOTION=NO
+STATE_EFFECT=HOLD exclusivamente ambiental; as evidências funcionais positivas foram preservadas.
+NEXT_ACTION=validar Interactive e a ausência de task no Windows real do Founder.
+NEXT_AGENT=NONE_FOUNDER_HOST_RUNTIME_VALIDATION
+STOP_CONDITION=não transformar o HOLD ambiental em PASS independente sem evidência suplementar do host real.
+
+### PSC-2026-10-19-010 — Promoção e ativação runtime real
+
+CHECKPOINT_ID=PSC-2026-10-19-010
+CHECKPOINT_DATE=2026-10-19
+CHECKPOINT_TIMEZONE=America/Sao_Paulo
+REPOSITORY=C:\desenvolvimento\FinanEP
+TRIGGER=COORDINATOR_VALIDATION_WITH_FOUNDER_HOST_RUNTIME_EVIDENCE
+RESULT=PASS
+TARGET=b0737c7338de8949528a266227d9809333d0863c
+PARENT=7f03ff946f4981e8d414eabb6ead08596a9aa88f
+INDEPENDENT_AUDIT_REFERENCE=FINANPE-BACKUP-AUTOMATION-AUDITOR-018
+INDEPENDENT_AUDIT_RESULT=HOLD_ENVIRONMENTAL
+
+FOUNDER_HOST_RUNTIME_PROBE=PASS
+FOUNDER_HOST_RUNTIME_PROVEN=
+- main limpo;
+- TASK_COUNT_BEFORE=0;
+- InteractiveToken falhou como esperado com ParameterBindingArgumentTransformationException;
+- Interactive criou ScheduledTaskPrincipal com sucesso;
+- principal user = JOHNN\johnn;
+- RunLevel=Limited;
+- LogonType interno=Interactive;
+- TASK_COUNT_AFTER=0;
+- nenhuma task registrada pelo probe;
+- Git não mudou.
+
+AUDITOR_ENVIRONMENTAL_GAP_RESOLVED_BY_FOUNDER_HOST_EVIDENCE=YES
+COORDINATOR_TECHNICAL_VALIDATION=PASS
+FOUNDER_INTEGRATION_APPROVAL=EXPLICIT
+CANONICAL_PROMOTION=YES
+INTEGRATION=FAST_FORWARD_TO_MAIN_CONFIRMED
+REMOTE_MAIN=b0737c7338de8949528a266227d9809333d0863c
+
+POST_INTEGRATION_GATES=
+- 12 testes focados PASS;
+- 24 testes totais PASS;
+- Django check PASS;
+- migration drift NO;
+- PowerShell parse PASS;
+- LogonType Interactive validado no host real;
+- PROJECT_STATE preservado;
+- somente dois arquivos autorizados;
+- worktree limpa;
+- push normal;
+- force push não executado.
+
+DJANGO_SECRET_KEY_PERSISTENT_IN_USER=YES
+SECRET_VALUE_EXPOSED=NO
+CONFIGURACAO_SISTEMA_EXISTS=YES
+BACKUP_DESTINATION=E:\Backups_Marcenaria
+BACKUP_OF_DAY_ALREADY_EXISTS=YES
+BACKUP_INTEGRITY_CHECK=ok
+REAL_DATABASE_INTEGRITY=OK
+TASK_COUNT_BEFORE=0
+
+REAL_WINDOWS_TASK_REGISTERED=YES
+TASK_NAME=FinanPE_Backup_Automatico
+TASK_STATE=Ready
+TASK_ACTION_EXECUTE=C:\WINDOWS\system32\cmd.exe
+TASK_ACTION_LAUNCHER=scripts_windows\Agendador_Backup_Pendrive.bat
+TASK_LOGON_TYPE=Interactive
+TASK_RUN_LEVEL=Limited
+TASK_REPETITION_INTERVAL=PT1H
+TASK_REPETITION_DURATION=P3650D
+TASK_CADENCE=HOURLY
+
+TASK_RUNTIME_EXECUTION_VALIDATED=YES
+TASK_LAST_RESULT=0
+TASK_ENABLED_AND_SCHEDULED=YES
+TASK_COUNT_FINAL=1
+RUNTIME_PATH=IF_DUE_SKIP_ALREADY_SUCCESSFUL
+IF_DUE_IDEMPOTENCY_RUNTIME=PASS
+LAST_BACKUP_EM_CHANGED=NO
+BACKUP_OF_DAY_REMAINED_EXISTING=YES
+REAL_DATABASE_HASH=FF8330AD37E7CEDD7C71222AABE07E0550338C817E909A5ADE826130683C7234
+REAL_DATABASE_MODIFIED=NO
+GIT_CHANGED=NO
+
+BACKUP_AUTOMATION_CODE_IMPLEMENTED=YES
+BACKUP_AUTOMATION_CODE_VALIDATED=YES
+BACKUP_RUNTIME_OPERATIONAL=YES
+BACKUP_RUNTIME_ACTIVATION_PENDING=NO
+STATE_EFFECT=TARGET promovido a último target canônico por validação do Coordenador com evidência runtime do host real do Founder, aprovação explícita, integração e ativação operacional.
+NEXT_ACTION=remediate employee payment quantity validation so zero/non-positive worked periods cannot silently become one paid period; independently audit the fix before integration; then continue remaining backend service gaps; frontend remains gated by prototype and explicit Founder approval
+NEXT_AGENT=FINANPE-EMPLOYEE-PAYMENT-INTEGRITY-IMPLEMENTER-019
+STOP_CONDITION=não declarar fechamento do projeto ou auditoria independente PASS para b0737c7; o resultado independente permanece HOLD_ENVIRONMENTAL.
+
+AGENT_016_DISPOSITION=ARCHIVED
+AGENT_018_DISPOSITION=ARCHIVED
+SCHEDULER_012_DISPOSITION=PERMANENT_CANONICAL_ONLY_WRITER
+
 ## RECONCILIATION RECORD
 
 RECONCILIATION_AGENT=FINANPE-CHECKPOINT-SCHEDULER-012
-RECONCILIATION_BASE_SHA=b1b4d54dc7a2ac6ed98582426e053b75b61ff187
-RECONCILIATION_BRANCH=docs/checkpoint-scheduler-012-r5
-RECONCILIATION_WORKTREE=C:\desenvolvimento\FinanEP.worktrees\checkpoint-scheduler-012-r5
+RECONCILIATION_BASE_SHA=b0737c7338de8949528a266227d9809333d0863c
+RECONCILIATION_BRANCH=docs/checkpoint-scheduler-012-r6
+RECONCILIATION_WORKTREE=C:\desenvolvimento\FinanEP.worktrees\checkpoint-scheduler-012-r6
 REJECTED_REFERENCE_CANDIDATE=ee78dee18fde13cb0e11690f5f765ba9ca257548
 REJECTED_REFERENCE_CHERRY_PICKED=NO
 REJECTED_CANDIDATE_VALIDATED=NO
@@ -357,6 +497,10 @@ INTEGRATE_REJECTED_CANDIDATE=NO
 HISTORY_SOURCE=semantic reuse only; clean composition directly on BASE_SHA
 CHECKPOINT_007_CREATED=YES
 CHECKPOINT_008_CREATED=YES
+CHECKPOINT_009_CREATED=YES
+CHECKPOINT_010_CREATED=YES
+CHECKPOINT_COUNT_AFTER=10
+CHECKPOINT_LAST_ID=PSC-2026-10-19-010
 HISTORICAL_CHRONOLOGY_CORRECTED=YES
 NO_DUPLICATE_CHECKPOINTS=YES
 CHECKPOINT_IDS_SEQUENTIAL=YES
