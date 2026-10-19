@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.clientes_agenda.models import AgendaContato
 from apps.financeiro.models import LancamentoFinanceiro
+from apps.financeiro.services import sincronizar_saldo_projeto
 from .models import ProjetoKanban
 
 
@@ -69,6 +70,11 @@ def aprovar_orcamento_service(
             return projeto
         raise ValidationError("Somente orçamentos na etapa 2 podem ser aprovados.")
 
+    saldo_restante = valor_total - valor_entrada
+    saldo_centavos = int(saldo_restante * 100)
+    if saldo_restante > Decimal('0.00') and qtd_parcelas_restante > saldo_centavos:
+        raise ValidationError("Cada parcela do saldo deve ter pelo menos R$ 0,01.")
+
     # 1. Atualiza dados do projeto
     projeto.etapa = '3_APROVADO'
     projeto.valor_total = valor_total
@@ -100,13 +106,11 @@ def aprovar_orcamento_service(
     if saldo_restante > Decimal('0.00'):
         data_base_vencimento = data_entrega_prevista or hoje
 
-        # Distribuição com precisão contábil em centavos
-        valor_parcela_base = (saldo_restante / qtd_parcelas_restante).quantize(Decimal('0.01'))
-        diferenca_centavos = saldo_restante - (valor_parcela_base * qtd_parcelas_restante)
+        # Distribui os centavos restantes, um por parcela, em ordem estável.
+        centavos_base, centavos_residuais = divmod(saldo_centavos, qtd_parcelas_restante)
 
         for i in range(qtd_parcelas_restante):
-            # A última parcela absorve eventuais arredondamentos de centavos
-            valor_parcela = valor_parcela_base + (diferenca_centavos if i == (qtd_parcelas_restante - 1) else Decimal('0.00'))
+            valor_parcela = Decimal(centavos_base + (1 if i < centavos_residuais else 0)) / 100
             vencimento_parcela = data_base_vencimento + timedelta(days=30 * i)
 
             descricao_parcela = (
@@ -206,6 +210,7 @@ def finalizar_projeto_service(
             if forma_pagamento_quitacao:
                 lancamento.forma_pagamento = forma_pagamento_quitacao
             lancamento.save()
+        projeto.saldo_restante = sincronizar_saldo_projeto(projeto.pk)
 
     # 2. Gatilho automático de Pós-Venda (hoje + 30 dias) se ainda não existir
     ja_existe_pos_venda = AgendaContato.objects.filter(
