@@ -194,6 +194,11 @@ def finalizar_projeto_service(
     projeto = ProjetoKanban.objects.select_for_update().get(id=projeto_id)
     hoje = timezone.localdate()
 
+    if quitar_pendencias and forma_pagamento_quitacao:
+        formas_validas = {value for value, _ in LancamentoFinanceiro.FORMA_PAGAMENTO_CHOICES}
+        if forma_pagamento_quitacao not in formas_validas:
+            raise ValidationError("A forma de pagamento da quitação é inválida.")
+
     projeto.etapa = '6_FINALIZADO'
     projeto.data_entrega_realizada = hoje
     projeto.save()
@@ -202,6 +207,7 @@ def finalizar_projeto_service(
     if quitar_pendencias:
         lancamentos_pendentes = LancamentoFinanceiro.objects.filter(
             projeto=projeto,
+            tipo='ENTRADA',
             status='PENDENTE'
         )
         for lancamento in lancamentos_pendentes:

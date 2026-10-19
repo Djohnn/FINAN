@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from apps.clientes_agenda.models import AgendaContato, Cliente
+from apps.financeiro.models import LancamentoFinanceiro
 from apps.kanban_projetos.models import ProjetoKanban
 from apps.kanban_projetos.services import (
     aprovar_orcamento_service,
@@ -95,6 +96,127 @@ class FinancialIntegrityTests(TestCase):
         self.assertEqual(self.projeto.saldo_em_aberto, Decimal('8.00'))
         self.assertEqual(self.projeto.valor_total, Decimal('10.00'))
         self.assertEqual(self.projeto.valor_entrada, Decimal('2.00'))
+
+    def test_finalizacao_quita_entrada_mas_preserva_saida_pendente(self):
+        """Given entrada e saida pendentes; When quitar; Then somente entrada paga."""
+        aprovar_orcamento_service(**self.kwargs)
+        saida = LancamentoFinanceiro.objects.create(
+            tipo='SAIDA',
+            categoria='OUTROS',
+            projeto=self.projeto,
+            descricao='Saída pendente do projeto',
+            valor=Decimal('3.00'),
+            forma_pagamento='PIX',
+            data_vencimento=self.hoje,
+            status='PENDENTE',
+        )
+
+        finalizar_projeto_service(self.projeto.pk, quitar_pendencias=True)
+
+        entradas = LancamentoFinanceiro.objects.filter(
+            projeto=self.projeto,
+            tipo='ENTRADA',
+        )
+        self.assertFalse(entradas.filter(status='PENDENTE').exists())
+        saida.refresh_from_db()
+        self.assertEqual(saida.status, 'PENDENTE')
+        self.assertIsNone(saida.data_pagamento)
+        self.projeto.refresh_from_db()
+        self.assertEqual(self.projeto.saldo_restante, Decimal('0.00'))
+        self.assertEqual(self.projeto.saldo_em_aberto, Decimal('0.00'))
+
+    def test_finalizacao_rejeita_forma_invalida_sem_mutacao(self):
+        """Given entrada pendente; When forma inválida; Then falhar sem mutação."""
+        aprovar_orcamento_service(**self.kwargs)
+        projeto_antes = ProjetoKanban.objects.values(
+            'etapa', 'data_entrega_realizada', 'saldo_restante',
+        ).get(pk=self.projeto.pk)
+        lancamentos_antes = list(
+            LancamentoFinanceiro.objects.filter(projeto=self.projeto)
+            .order_by('id')
+            .values()
+        )
+        agenda_antes = list(
+            AgendaContato.objects.filter(projeto=self.projeto)
+            .order_by('id')
+            .values()
+        )
+        agenda_count_antes = AgendaContato.objects.count()
+
+        with self.assertRaises(ValidationError):
+            finalizar_projeto_service(
+                self.projeto.pk,
+                quitar_pendencias=True,
+                forma_pagamento_quitacao='INVALIDA',
+            )
+
+        self.assertEqual(
+            ProjetoKanban.objects.values(
+                'etapa', 'data_entrega_realizada', 'saldo_restante',
+            ).get(pk=self.projeto.pk),
+            projeto_antes,
+        )
+        self.assertEqual(
+            list(
+                LancamentoFinanceiro.objects.filter(projeto=self.projeto)
+                .order_by('id')
+                .values()
+            ),
+            lancamentos_antes,
+        )
+        self.assertEqual(AgendaContato.objects.count(), agenda_count_antes)
+        self.assertEqual(
+            list(
+                AgendaContato.objects.filter(projeto=self.projeto)
+                .order_by('id')
+                .values()
+            ),
+            agenda_antes,
+        )
+
+    def test_finalizacao_com_forma_valida_quita_apenas_entradas(self):
+        """Given entrada e saída pendentes; When forma válida; Then preservar saída."""
+        aprovar_orcamento_service(**self.kwargs)
+        saida = LancamentoFinanceiro.objects.create(
+            tipo='SAIDA',
+            categoria='OUTROS',
+            projeto=self.projeto,
+            descricao='Saída pendente do projeto',
+            valor=Decimal('3.00'),
+            forma_pagamento='PIX',
+            data_vencimento=self.hoje,
+            status='PENDENTE',
+        )
+        pendentes_antes = list(
+            LancamentoFinanceiro.objects.filter(
+                projeto=self.projeto,
+                tipo='ENTRADA',
+                status='PENDENTE',
+            ).values_list('pk', flat=True)
+        )
+
+        finalizar_projeto_service(
+            self.projeto.pk,
+            quitar_pendencias=True,
+            forma_pagamento_quitacao='DINHEIRO',
+        )
+
+        entradas = LancamentoFinanceiro.objects.filter(
+            projeto=self.projeto,
+            tipo='ENTRADA',
+        )
+        entradas_quitadas = entradas.filter(pk__in=pendentes_antes)
+        self.assertFalse(entradas_quitadas.filter(status='PENDENTE').exists())
+        self.assertFalse(entradas_quitadas.exclude(forma_pagamento='DINHEIRO').exists())
+        self.assertTrue(entradas_quitadas.filter(status='PAGO', data_pagamento=self.hoje).exists())
+        self.assertEqual(
+            entradas.exclude(pk__in=pendentes_antes).values_list('forma_pagamento', flat=True).get(),
+            'PIX',
+        )
+        saida.refresh_from_db()
+        self.assertEqual(saida.status, 'PENDENTE')
+        self.assertEqual(saida.forma_pagamento, 'PIX')
+        self.assertIsNone(saida.data_pagamento)
 
     def test_finalizacao_reverte_quitacao_se_pos_venda_falhar(self):
         """Given aprovacao; When falhar apos quitar; Then rollback integral."""
