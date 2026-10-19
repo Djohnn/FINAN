@@ -30,7 +30,9 @@ def lancar_pagamento_funcionario_service(
     if valor_customizado is not None:
         valor_final = Decimal(str(valor_customizado))
     else:
-        qtd = Decimal(str(quantidade_periodos or 1))
+        qtd = Decimal(str(quantidade_periodos))
+        if qtd <= 0:
+            raise ValidationError("A quantidade de períodos deve ser maior que zero.")
         valor_final = (funcionario.valor_base * qtd).quantize(Decimal('0.01'))
 
     if valor_final <= Decimal('0.00'):
