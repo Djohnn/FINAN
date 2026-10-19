@@ -13,6 +13,14 @@ from django.utils import timezone
 from .models import ConfiguracaoSistema
 
 
+def backup_realizado_hoje(config, hoje=None) -> bool:
+    """Retorna se a configuração registra um backup bem-sucedido hoje."""
+    if config is None or not config.ultimo_backup_sucesso or config.ultimo_backup_em is None:
+        return False
+    data_hoje = hoje or timezone.localdate()
+    return timezone.localdate(config.ultimo_backup_em) == data_hoje
+
+
 @contextmanager
 def _backup_lock(source_path: Path):
     """Lock de processo cruzado sem dependência externa, inclusive no Windows."""

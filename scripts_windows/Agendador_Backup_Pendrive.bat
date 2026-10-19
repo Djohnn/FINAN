@@ -1,4 +1,4 @@
 @echo off
-cd /d "%~dp0"
-echo Executando backup diario no pendrive...
-python manage.py realizar_backup
+set "ROOT=%~dp0.."
+"%ROOT%\venv\Scripts\python.exe" "%ROOT%\manage.py" realizar_backup --if-due
+exit /b %ERRORLEVEL%

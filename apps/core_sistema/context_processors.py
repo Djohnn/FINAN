@@ -4,6 +4,7 @@ from apps.clientes_agenda.models import AgendaContato
 from apps.kanban_projetos.models import ProjetoKanban
 
 from .models import ConfiguracaoSistema
+from .services import backup_realizado_hoje
 
 
 def alertas_globais(request):
@@ -23,10 +24,10 @@ def alertas_globais(request):
         backup_status = 'nao_configurado'
     elif config.mensagem_erro_backup:
         backup_status = 'falha'
-    elif not config.ultimo_backup_sucesso:
-        backup_status = 'ainda_nao_realizado'
-    else:
+    elif backup_realizado_hoje(config):
         backup_status = 'ok'
+    else:
+        backup_status = 'pendente_hoje'
 
     return {
         'orcamentos_atrasados': orcamentos_atrasados,
