@@ -13,23 +13,27 @@ CURRENT_FRONT=foundation-remediation-before-frontend
 CURRENT_PHASE=backend-and-operational-gap-remediation
 CURRENT_GATE=remaining-backend-service-integrity-gaps
 
-CURRENT_CANONICAL_TARGET=b0737c7338de8949528a266227d9809333d0863c
+CURRENT_CANONICAL_TARGET=55569a8d7fb95087fa67490b803fada13b791314
 CURRENT_CANDIDATE_TARGET=NONE
-LAST_CANONICAL_INDEPENDENTLY_AUDITED_SHA=b1b4d54dc7a2ac6ed98582426e053b75b61ff187
+LAST_CANONICAL_INDEPENDENTLY_AUDITED_SHA=55569a8d7fb95087fa67490b803fada13b791314
 CURRENT_CANDIDATE_SHA=NONE
 
-LAST_VALIDATED_AUDIT=FINANPE-BACKUP-AUTOMATION-AUDITOR-018
-LAST_VALIDATED_AUDIT_RESULT=HOLD_ENVIRONMENTAL
-LATEST_INDEPENDENT_AUDIT_TARGET=b0737c7338de8949528a266227d9809333d0863c
-LATEST_INDEPENDENT_AUDIT_RESULT=HOLD_ENVIRONMENTAL
+LAST_VALIDATED_AUDIT=FINANPE-EMPLOYEE-PAYMENT-INTEGRITY-AUDITOR-021
+LAST_VALIDATED_AUDIT_RESULT=PASS
+LATEST_INDEPENDENT_AUDIT_TARGET=55569a8d7fb95087fa67490b803fada13b791314
+LATEST_INDEPENDENT_AUDIT_RESULT=PASS
 LATEST_COORDINATOR_VALIDATION_RESULT=PASS
-CURRENT_CANONICAL_TARGET_VALIDATION_MODE=COORDINATOR_VALIDATED_WITH_FOUNDER_HOST_RUNTIME_EVIDENCE
+CURRENT_CANONICAL_TARGET_VALIDATION_MODE=INDEPENDENT_AUDIT_PASS_PLUS_FOUNDER_APPROVED_INTEGRATION
 
 ACTIVE_AGENT=NONE
 WAITING_FOR=NONE
 
 MAIN_BLOCKER=NONE preventing controlled continuation
-NEXT_SAFE_ACTION=remediate employee payment quantity validation so zero/non-positive worked periods cannot silently become one paid period; independently audit the fix before integration; then continue remaining backend service gaps; frontend remains gated by prototype and explicit Founder approval
+NEXT_SAFE_ACTION=implement FIN-020-001 finalization settlement hardening from the latest canonical main with Red-to-Green tests, then independently audit before integration
+NEXT_AGENT=FINANPE-FINALIZATION-SETTLEMENT-IMPLEMENTER-025
+AGENT_025_CREATED=NO
+PARALLEL_READ_ONLY_DISCOVERY_ACTIVE=NO
+PARALLEL_READ_ONLY_AGENT=NONE
 
 BACKUP_AUTOMATION_CODE_IMPLEMENTED=YES
 BACKUP_AUTOMATION_CODE_VALIDATED=YES
@@ -69,10 +73,46 @@ OPEN_GAPS=
 - monthly financial closing not implemented;
 - domain frontend not implemented;
 - frontend requires approved prototype before implementation;
-- employee payment quantity validation is next backend integrity gap.
+- FIN-020-001 finalization settlement hardening = NEXT;
+- employee repeat payment idempotency = PRODUCT_OR_DATA_MODEL_AMBIGUITY;
+- reactivation origin/choice validation;
+- satisfaction choices validation;
+- LIGACAO_MANUAL alert inclusion;
+- WhatsApp getter read-side-effect;
+- archive/history and remaining audit 008 gaps.
 
-CHECKPOINT_COUNT=10
-CHECKPOINT_LAST_ID=PSC-2026-10-19-010
+EMPLOYEE_PAYMENT_QUANTITY_GAP_CLOSED=YES
+EMPLOYEE_REPEAT_PAYMENT_GAP=OPEN
+EMPLOYEE_REPEAT_PAYMENT_CLASSIFICATION=PRODUCT_OR_DATA_MODEL_AMBIGUITY
+FIN020001_CONTRACT_STATUS=PASS
+FIN020001_CONTRACT_AUDITOR=FINANPE-FINALIZATION-SETTLEMENT-CONTRACT-AUDITOR-023
+FIN020001_FILES_CHANGED_COUNT=0
+FIN020001_REAL_DATABASE_MODIFIED=NO
+FIN020001_NEXT_AGENT=FINANPE-FINALIZATION-SETTLEMENT-IMPLEMENTER-025
+FIN020001_IMPLEMENTATION_FILES=
+- apps/kanban_projetos/services.py;
+- tests/test_financial_integrity.py.
+
+CLIENT_AGENDA_CONTRACT_STATUS=PASS
+CLIENT_AGENDA_CONTRACT_AGENT=FINANPE-CLIENT-AGENDA-CONTRACT-AUDITOR-024
+CLIENT_AGENDA_CONTRACT_FILES_CHANGED_COUNT=0
+CLIENT_AGENDA_CONTRACT_REAL_DATABASE_MODIFIED=NO
+CLIENT_AGENDA_FUTURE_FILES=
+- apps/clientes_agenda/models.py;
+- apps/clientes_agenda/services.py;
+- apps/core_sistema/context_processors.py;
+- tests/test_clientes_agenda_contracts.py.
+
+DEFERRED_PRODUCT_DECISIONS=
+- remover ou preservar default SATISFEITO;
+- restringir concluir_pos_venda_service apenas a POS_VENDA_30_DIAS;
+- política de conclusão repetida;
+- employee repeat payment idempotency;
+- histórico completo de arquivamento/reativação;
+- demais decisões já deferidas.
+
+CHECKPOINT_COUNT=11
+CHECKPOINT_LAST_ID=PSC-2026-10-19-011
 
 ## CHECKPOINT HISTORY
 
@@ -483,12 +523,168 @@ AGENT_016_DISPOSITION=ARCHIVED
 AGENT_018_DISPOSITION=ARCHIVED
 SCHEDULER_012_DISPOSITION=PERMANENT_CANONICAL_ONLY_WRITER
 
+### PSC-2026-10-19-011 — Integridade de quantidade e contratos read-only
+
+CHECKPOINT_ID=PSC-2026-10-19-011
+CHECKPOINT_DATE=2026-10-19
+CHECKPOINT_TIMEZONE=America/Sao_Paulo
+REPOSITORY=C:\desenvolvimento\FinanEP
+RESULT=PASS
+TARGET=55569a8d7fb95087fa67490b803fada13b791314
+PARENT=b4a8defdf4dc05e7dde7f635632e256b25ffb432
+IMPLEMENTER=FINANPE-EMPLOYEE-PAYMENT-INTEGRITY-IMPLEMENTER-019
+INDEPENDENT_AUDITOR=FINANPE-EMPLOYEE-PAYMENT-INTEGRITY-AUDITOR-021
+
+DEFECT=
+- quantidade_periodos=0 era processado por semântica equivalente a quantidade_periodos or 1;
+- zero virava um período e permitia saída financeira indevida.
+
+DEFECT_CONFIRMED=YES
+BASE_ZERO_BECOMES_ONE=YES
+RED_REPRODUCED=YES
+RED_FAILURE_COUNT=4
+
+CORRECTION_PROVEN=
+- zero int rejeitado;
+- zero float rejeitado;
+- Decimal("0") rejeitado;
+- quantidade negativa rejeitada;
+- ValidationError ocorre antes da criação financeira;
+- nenhuma mutação financeira em quantidade inválida;
+- default omitido continua 1;
+- quantidade positiva inteira preservada;
+- quantidade positiva fracionária preservada;
+- valor customizado positivo preservado;
+- valor customizado não positivo continua rejeitado.
+
+AUDITOR_021_INITIAL_ATTEMPT=
+RESULT=HOLD_PROCEDURAL_PROVENANCE_ONLY
+AUDITOR_021_INITIAL_HOLD_PRESERVED=YES
+REASON=a worktree independente/detached solicitada não existia e os gates haviam sido executados na worktree limpa do implementador.
+INITIAL_ATTEMPT_PROVEN=
+- nenhum defeito funcional foi encontrado;
+- RED foi reproduzido;
+- 7 testes focados PASS no TARGET;
+- 31 testes completos PASS;
+- banco real intacto;
+- HOLD exclusivamente por independência/proveniência da worktree.
+
+AUDITOR_021_RETRY=
+MODE=EMPLOYEE_PAYMENT_PERIOD_QUANTITY_REAUDIT_PROVENANCE_RETRY
+AUDIT_WORKTREE=C:\desenvolvimento\FinanEP.worktrees\employee-payment-integrity-auditor-021
+TARGET=55569a8d7fb95087fa67490b803fada13b791314
+AUDIT_WORKTREE_DETACHED=YES
+AUDIT_WORKTREE_CLEAN_BEFORE=YES
+IMPLEMENTER_WORKTREE_USED_FOR_TARGET_GATES=NO
+IMPLEMENTER_WORKTREE_MODIFIED=NO
+SOURCE_REPOSITORY_CHANGED=NO
+EMPLOYEE_PAYMENT_FIX_AUDIT=PASS
+READY_FOR_INTEGRATION=YES
+TECHNICAL_VERDICT=PASS
+
+FOCUSED_TEST_COUNT=7
+FOCUSED_TEST_RESULT=PASS
+FULL_TEST_COUNT=31
+FULL_TEST_RESULT=PASS
+DJANGO_CHECK=PASS
+MIGRATION_DRIFT=NO
+DIFF_CHECK=PASS
+REAL_DATABASE_HASH=FF8330AD37E7CEDD7C71222AABE07E0550338C817E909A5ADE826130683C7234
+REAL_DATABASE_MODIFIED=NO
+PRODUCT_BLOCKER=NO
+DATA_INTEGRITY_BLOCKER=NO
+FINANCIAL_INTEGRITY_BLOCKER=NO
+ENVIRONMENT_BLOCKER=NO
+
+FOUNDER_INTEGRATION_APPROVAL=EXPLICIT
+INTEGRATION=FAST_FORWARD_TO_MAIN_CONFIRMED
+REMOTE_MAIN=55569a8d7fb95087fa67490b803fada13b791314
+POST_INTEGRATION_GATES=
+- 7 testes focados PASS;
+- 31 testes totais PASS;
+- Django check PASS;
+- migration drift NO;
+- diff check PASS;
+- banco real inalterado;
+- exatamente dois arquivos autorizados;
+- PROJECT_STATE não alterado pelo fix;
+- worktree limpa;
+- push normal;
+- force push não executado.
+
+CANONICAL_PROMOTION=YES
+EMPLOYEE_PAYMENT_QUANTITY_GAP_CLOSED=YES
+EMPLOYEE_REPEAT_PAYMENT_GAP=OPEN
+EMPLOYEE_REPEAT_PAYMENT_CLASSIFICATION=PRODUCT_OR_DATA_MODEL_AMBIGUITY
+
+FIN020001_CONTRACT=
+CONTRACT_AUDITOR=FINANPE-FINALIZATION-SETTLEMENT-CONTRACT-AUDITOR-023
+TECHNICAL_VERDICT=PASS
+FILES_CHANGED_COUNT=0
+REAL_DATABASE_MODIFIED=NO
+CONFIRMED=
+1. finalizar_projeto_service atualmente pode liquidar SAIDA/PENDENTE vinculada ao projeto porque filtra apenas projeto e status;
+2. quitação do saldo do cliente deve atingir somente projeto=<projeto>, tipo='ENTRADA', status='PENDENTE';
+3. forma_pagamento_quitacao truthy fora de LancamentoFinanceiro.FORMA_PAGAMENTO_CHOICES é atualmente aceita;
+4. forma truthy inválida deve levantar ValidationError antes de persistir projeto, lançamentos ou AgendaContato;
+5. forma None com quitar_pendencias=True permanece comportamento atual; obrigatoriedade de nova forma é decisão de produto e não pertence ao fix objetivo;
+6. forma inválida quando quitar_pendencias=False permanece fora do fix objetivo;
+7. sincronizar_saldo_projeto já trabalha somente com ENTRADA/PENDENTE;
+8. teste existente de rollback por falha no pós-venda permanece válido.
+FUTURE_IMPLEMENTATION_FILES=
+- apps/kanban_projetos/services.py;
+- tests/test_financial_integrity.py.
+NO_MIGRATION=YES
+
+CLIENT_AGENDA_CONTRACT=
+CONTRACT_AGENT=FINANPE-CLIENT-AGENDA-CONTRACT-AUDITOR-024
+MODE=SATISFACTION_AND_MANUAL_CALL_ALERT_FIX_CONTRACT
+TECHNICAL_VERDICT=PASS
+FILES_CHANGED_COUNT=0
+REAL_DATABASE_MODIFIED=NO
+PROVEN=
+- INVALID_SATISFACTION_PERSISTIBLE=YES;
+- SATISFACTION_CHOICES_VALIDATION_OBJECTIVE=YES;
+- SERVICE_VALIDATION_REQUIRED=YES;
+- MODEL_CLEAN_VALIDATION_REQUIRED=YES;
+- MANUAL_CALL_CURRENTLY_EXCLUDED=YES;
+- MANUAL_CALL_ALERT_FIX_OBJECTIVE=YES.
+FUTURE_CONTRACT=
+- validar membership de nivel_satisfacao no service antes de concluir;
+- validar membership também em AgendaContato.clean() para proteger gravação direta via save();
+- preservar os três valores válidos atuais;
+- não remover default SATISFEITO neste fix;
+- não adicionar type guard neste fix;
+- incluir POS_VENDA_30_DIAS, RETORNO_ORCAMENTO e LIGACAO_MANUAL nos alertas com realizado=False e data_agendada__lte=hoje.
+FUTURE_IMPLEMENTATION_FILES=
+- apps/clientes_agenda/models.py;
+- apps/clientes_agenda/services.py;
+- apps/core_sistema/context_processors.py;
+- tests/test_clientes_agenda_contracts.py.
+FILES_OVERLAP_WITH_FIN020001=NO
+
+STATE_EFFECT=quantidade de períodos de pagamento validada; contratos FIN-020-001 e de agenda concluídos read-only; TARGET promovido a último target canônico independentemente auditado; nenhuma frente nova de discovery foi iniciada nesta barreira.
+NEXT_SAFE_ACTION=implement FIN-020-001 finalization settlement hardening from the latest canonical main with Red-to-Green tests, then independently audit before integration
+NEXT_AGENT=FINANPE-FINALIZATION-SETTLEMENT-IMPLEMENTER-025
+AGENT_025_CREATED=NO
+PARALLEL_READ_ONLY_DISCOVERY_ACTIVE=NO
+PARALLEL_READ_ONLY_AGENT=NONE
+STOP_CONDITION=não declarar os contratos read-only como fixes implementados nem iniciar novo discovery nesta barreira; parar diante de regra de produto ambígua ou alteração fora de docs/PROJECT_STATE.md nesta missão.
+
+AGENT_019_DISPOSITION=ARCHIVED
+AGENT_021_DISPOSITION=ARCHIVED
+AGENT_020_DISPOSITION=ARCHIVED
+AGENT_022_DISPOSITION=ARCHIVED
+AGENT_023_DISPOSITION=ARCHIVED
+AGENT_024_DISPOSITION=ARCHIVED
+SCHEDULER_012_DISPOSITION=PERMANENT_CANONICAL_ONLY_WRITER
+
 ## RECONCILIATION RECORD
 
 RECONCILIATION_AGENT=FINANPE-CHECKPOINT-SCHEDULER-012
-RECONCILIATION_BASE_SHA=b0737c7338de8949528a266227d9809333d0863c
-RECONCILIATION_BRANCH=docs/checkpoint-scheduler-012-r6
-RECONCILIATION_WORKTREE=C:\desenvolvimento\FinanEP.worktrees\checkpoint-scheduler-012-r6
+RECONCILIATION_BASE_SHA=55569a8d7fb95087fa67490b803fada13b791314
+RECONCILIATION_BRANCH=docs/checkpoint-scheduler-012-r9
+RECONCILIATION_WORKTREE=C:\desenvolvimento\FinanEP.worktrees\checkpoint-scheduler-012-r9
 REJECTED_REFERENCE_CANDIDATE=ee78dee18fde13cb0e11690f5f765ba9ca257548
 REJECTED_REFERENCE_CHERRY_PICKED=NO
 REJECTED_CANDIDATE_VALIDATED=NO
@@ -499,10 +695,18 @@ CHECKPOINT_007_CREATED=YES
 CHECKPOINT_008_CREATED=YES
 CHECKPOINT_009_CREATED=YES
 CHECKPOINT_010_CREATED=YES
-CHECKPOINT_COUNT_AFTER=10
-CHECKPOINT_LAST_ID=PSC-2026-10-19-010
+CHECKPOINT_011_CREATED=YES
+CHECKPOINT_COUNT_AFTER=11
+CHECKPOINT_LAST_ID=PSC-2026-10-19-011
 HISTORICAL_CHRONOLOGY_CORRECTED=YES
 NO_DUPLICATE_CHECKPOINTS=YES
 CHECKPOINT_IDS_SEQUENTIAL=YES
 CONTRADICTION=NO
 HISTORY_RECONCILED=YES
+REJECTED_STALE_CHECKPOINT_CANDIDATE_1=8a5378be255de2b0afe0197c209b2d11cd5ac26a
+REJECTED_STALE_CHECKPOINT_CANDIDATE_1_INTEGRATED=NO
+REJECTED_STALE_CHECKPOINT_CANDIDATE_1_CHERRY_PICKED=NO
+REJECTED_STALE_CHECKPOINT_CANDIDATE_2=66ea903fecf45609092ef96bc02756bd42344517
+REJECTED_STALE_CHECKPOINT_CANDIDATE_2_INTEGRATED=NO
+REJECTED_STALE_CHECKPOINT_CANDIDATE_2_CHERRY_PICKED=NO
+REJECTED_STALE_CHECKPOINT_CANDIDATE_2_REASON=agent 024 completed with PASS after candidate creation and before integration, making operational agent metadata stale
