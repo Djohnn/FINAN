@@ -138,21 +138,40 @@ def arquivar_orcamento_service(
     projeto_id: int,
     motivo_arquivamento: str,
     observacao: str = '',
-    dias_lembrete_retorno: Optional[int] = None,
+    dias_lembrete_retorno: Optional[int | str] = None,
 ) -> ProjetoKanban:
     """
     Move o projeto para a geladeira (9_ARQUIVADO), registrando o motivo
     e opcionalmente agendando um retorno futuro no calendário de contatos.
     """
+    motivos_validos = {
+        value for value, _label in ProjetoKanban.MOTIVO_ARQUIVAMENTO_CHOICES
+    }
+    if motivo_arquivamento not in motivos_validos:
+        raise ValidationError('O motivo do arquivamento é inválido.')
+
+    dias_normalizados = None
+    if dias_lembrete_retorno is not None:
+        try:
+            dias_normalizados = int(dias_lembrete_retorno)
+        except (TypeError, ValueError):
+            raise ValidationError(
+                'Os dias do lembrete de retorno devem ser numéricos.'
+            ) from None
+        if dias_normalizados < 0:
+            raise ValidationError(
+                'Os dias do lembrete de retorno não podem ser negativos.'
+            )
+
     projeto = ProjetoKanban.objects.select_for_update().get(id=projeto_id)
     projeto.etapa = '9_ARQUIVADO'
     projeto.motivo_arquivamento = motivo_arquivamento
     projeto.observacao_arquivamento = observacao or ''
     projeto.save()
 
-    if dias_lembrete_retorno and int(dias_lembrete_retorno) > 0:
+    if dias_normalizados is not None and dias_normalizados > 0:
         hoje = timezone.localdate()
-        data_retorno = hoje + timedelta(days=int(dias_lembrete_retorno))
+        data_retorno = hoje + timedelta(days=dias_normalizados)
         AgendaContato.objects.create(
             cliente=projeto.cliente,
             projeto=projeto,
