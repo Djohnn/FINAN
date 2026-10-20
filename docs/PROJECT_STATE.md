@@ -11,34 +11,34 @@ CHECKPOINT_REMAINS_MANDATORY=YES
 CURRENT_PROJECT=FinanPE
 CURRENT_FRONT=foundation-remediation-before-frontend
 CURRENT_PHASE=backend-and-operational-gap-remediation
-CURRENT_GATE=whatsapp-read-side-effect-next
+CURRENT_GATE=employee-payment-method-integrity-next
 
-CURRENT_CANONICAL_TARGET=1da3df1088fb7c20c0ff19895e47ea91ce90cd17
+CURRENT_CANONICAL_TARGET=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
 CURRENT_CANDIDATE_TARGET=NONE
-LAST_CANONICAL_INDEPENDENTLY_AUDITED_SHA=1da3df1088fb7c20c0ff19895e47ea91ce90cd17
+LAST_CANONICAL_INDEPENDENTLY_AUDITED_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
 CURRENT_CANDIDATE_SHA=NONE
 
-LAST_VALIDATED_AUDIT=FINANPE-REACTIVATION-INTEGRITY-AUDITOR-047
+LAST_VALIDATED_AUDIT=FINANPE-WHATSAPP-SIDE-EFFECT-AUDITOR-051
 LAST_VALIDATED_AUDIT_RESULT=PASS
-LATEST_INDEPENDENT_AUDIT_TARGET=1da3df1088fb7c20c0ff19895e47ea91ce90cd17
+LATEST_INDEPENDENT_AUDIT_TARGET=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
 LATEST_INDEPENDENT_AUDIT_RESULT=PASS
 LATEST_COORDINATOR_VALIDATION_RESULT=PASS
 CURRENT_CANONICAL_TARGET_VALIDATION_MODE=INDEPENDENT_AUDIT_PASS_PLUS_FOUNDER_APPROVED_INTEGRATION
 
-LOCAL_MAIN_SHA=1da3df1088fb7c20c0ff19895e47ea91ce90cd17
-REMOTE_MAIN_SHA=1da3df1088fb7c20c0ff19895e47ea91ce90cd17
-CURRENT_TEST_BASELINE=66 tests PASS
+LOCAL_MAIN_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+REMOTE_MAIN_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+CURRENT_TEST_BASELINE=76 tests PASS
 REAL_DATABASE_LAST_KNOWN_HASH=FF8330AD37E7CEDD7C71222AABE07E0550338C817E909A5ADE826130683C7234
 
-CHECKPOINT_COUNT=15
-CHECKPOINT_LAST_ID=PSC-2026-10-19-015
+CHECKPOINT_COUNT=16
+CHECKPOINT_LAST_ID=PSC-2026-10-19-016
 
-ACTIVE_AGENT=FINANPE-REMAINING-BACKEND-GAPS-REFRESH-AUDITOR-050
+ACTIVE_AGENT=NONE
 WAITING_FOR=NONE
 
 MAIN_BLOCKER=NONE preventing controlled continuation
-NEXT_SAFE_ACTION=after integrating checkpoint 015, create agent 049 from resulting main and implement only the validated non-mutating WhatsApp getter slice
-NEXT_AGENT=FINANPE-WHATSAPP-SIDE-EFFECT-IMPLEMENTER-049
+NEXT_SAFE_ACTION=after checkpoint 016 is integrated, create agent 056 from resulting main and implement only GAP-001 employee payment method validation
+NEXT_AGENT=FINANPE-EMPLOYEE-PAYMENT-METHOD-INTEGRITY-IMPLEMENTER-056
 NEXT_AGENT_STATUS=RESERVED_NOT_CREATED
 AGENT_035_DISPOSITION=ARCHIVED_PRODUCT_AND_DATA_MODEL_DECISION_PENDING
 AGENT_036_DISPOSITION=ARCHIVED
@@ -57,10 +57,24 @@ AGENT_045_DISPOSITION=ARCHIVED
 AGENT_046_DISPOSITION=ARCHIVED_PRODUCT_DECISION_PENDING
 AGENT_047_DISPOSITION=ARCHIVED
 AGENT_048_DISPOSITION=ARCHIVED
-AGENT_049_STATUS=RESERVED_NOT_CREATED
-AGENT_050_DISPOSITION=ACTIVE_READ_ONLY
-PARALLEL_READ_ONLY_DISCOVERY_ACTIVE=YES
-PARALLEL_READ_ONLY_AGENT=FINANPE-REMAINING-BACKEND-GAPS-REFRESH-AUDITOR-050
+AGENT_049_DISPOSITION=ARCHIVED
+AGENT_050_DISPOSITION=ARCHIVED
+AGENT_051_DISPOSITION=ARCHIVED
+AGENT_052_DISPOSITION=ARCHIVED
+AGENT_053_DISPOSITION=ARCHIVED
+AGENT_054_DISPOSITION=ARCHIVED
+AGENT_055_DISPOSITION=ARCHIVED
+AGENT_055_RESULT=PASS_DISCOVERY
+AGENT_056_STATUS=RESERVED_NOT_CREATED
+PARALLEL_READ_ONLY_DISCOVERY_ACTIVE=NO
+PARALLEL_READ_ONLY_AGENT=NONE
+
+REJECTED_CHECKPOINT_016_CANDIDATE=cf1b745c2a1ec897032f78bca231ce92ee1bc5c5
+REJECTED_CHECKPOINT_016_CANDIDATE_PARENT=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+REJECTED_CHECKPOINT_016_CANDIDATE_REASON=agent 055 lifecycle was recorded as ACTIVE_READ_ONLY even though a completed PASS_DISCOVERY result exists and worktree existence alone is not proof of active lifecycle.
+REJECTED_CANDIDATE_INTEGRATED=NO
+REJECTED_CANDIDATE_PUSHED=NO
+REJECTED_CANDIDATE_REUSED=NO
 
 BACKUP_AUTOMATION_CODE_IMPLEMENTED=YES
 BACKUP_AUTOMATION_CODE_VALIDATED=YES
@@ -102,10 +116,11 @@ OPEN_GAPS=
 - frontend requires approved prototype before implementation;
 - monthly closing remains HOLD_PRODUCT_DECISIONS and is not ready for implementation;
 - employee repeat payment idempotency = PRODUCT_OR_DATA_MODEL_AMBIGUITY;
-- WhatsApp getter implementation pending;
-- finalization repeat/date = PRODUCT_DECISION_PENDING;
-- reactivation implementation closed;
-- remaining backend gaps discovery active under agent 050;
+- GAP-001 employee payment method validation implementation pending;
+- GAP-002 ProjetoKanban.etapa choice validation pending;
+- GAP-002 AgendaContato.tipo choice validation pending;
+- GAP-002 Funcionario.periodicidade validation pending;
+- finalization repeat/date/source-stage product decisions;
 - archive/history and remaining audit 008 gaps;
 - Admin role product decision pending.
 
@@ -137,6 +152,10 @@ REACTIVATION_INTEGRITY_STATUS=CLOSED_INTEGRATED
 REACTIVATION_IMPLEMENTATION_SHA=1da3df1088fb7c20c0ff19895e47ea91ce90cd17
 REACTIVATION_AUDITOR=FINANPE-REACTIVATION-INTEGRITY-AUDITOR-047
 REACTIVATION_AUDIT_RESULT=PASS
+WHATSAPP_INTEGRITY_STATUS=CLOSED_INTEGRATED
+WHATSAPP_IMPLEMENTATION_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+WHATSAPP_AUDITOR=FINANPE-WHATSAPP-SIDE-EFFECT-AUDITOR-051
+WHATSAPP_AUDIT_RESULT=PASS
 CLIENT_AGENDA_FUTURE_FILES=
 - apps/clientes_agenda/models.py;
 - apps/clientes_agenda/services.py;
@@ -1404,12 +1423,215 @@ PROJECT_CLOSED=NO
 STATE_EFFECT=reactivation integrity was integrated and independently audited PASS; WhatsApp remains the next reserved mutable slice; later read-only discovery 050 is recorded only as point-in-time evidence.
 STOP_CONDITION=do not create agent 049 in this checkpoint, do not invent a result for agent 050, preserve agent 041 as NOT_CREATED, and stop on any change outside docs/PROJECT_STATE.md in this mission.
 
+### PSC-2026-10-19-016 — Recomposição da integridade WhatsApp e gaps de backend
+
+CHECKPOINT_ID=PSC-2026-10-19-016
+CHECKPOINT_DATE=2026-10-19
+CHECKPOINT_TIMEZONE=America/Sao_Paulo
+REPOSITORY=C:\desenvolvimento\FinanEP
+TARGET=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+PARENT=e245abaf984e480299bd59f50b906fab66d333aa
+RESULT=PASS
+
+CHECKPOINT_SEMANTICS=POINT_IN_TIME_EVENT_SNAPSHOT
+CHECKPOINT_BLOCKS_DISCOVERY=NO
+CHECKPOINT_BLOCKS_NEW_MUTABLE_COMMIT_UNTIL_INTEGRATED=YES
+
+CANONICAL_STATE=
+- CURRENT_CANONICAL_TARGET=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8;
+- LAST_CANONICAL_INDEPENDENTLY_AUDITED_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8;
+- LATEST_INDEPENDENT_AUDIT_TARGET=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8;
+- LAST_VALIDATED_AUDIT=FINANPE-WHATSAPP-SIDE-EFFECT-AUDITOR-051;
+- LAST_VALIDATED_AUDIT_RESULT=PASS;
+- LOCAL_MAIN_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8;
+- REMOTE_MAIN_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8;
+- CURRENT_TEST_BASELINE=76 tests PASS;
+- REAL_DATABASE_LAST_KNOWN_HASH=FF8330AD37E7CEDD7C71222AABE07E0550338C817E909A5ADE826130683C7234.
+
+WHATSAPP_INTEGRITY=
+IMPLEMENTER=FINANPE-WHATSAPP-SIDE-EFFECT-IMPLEMENTER-049
+IMPLEMENTATION_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+IMPLEMENTATION_PARENT=e245abaf984e480299bd59f50b906fab66d333aa
+INDEPENDENT_AUDITOR=FINANPE-WHATSAPP-SIDE-EFFECT-AUDITOR-051
+AUDIT_RESULT=PASS
+INTEGRATED=YES
+PUSHED_TO_MAIN=YES
+CONTRACT_CLOSED=YES
+PROVEN=
+- project WhatsApp getter does not create ConfiguracaoSistema;
+- agenda WhatsApp getter does not create ConfiguracaoSistema;
+- no-config visible name remains Minha Marcenaria;
+- blank config remains Marcenaria;
+- custom config preserved;
+- phone normalization preserved;
+- DDI 55 preserved;
+- URL quote preserved;
+- message copy preserved;
+- get_solo global unchanged;
+- backup regression preserved;
+- no migration;
+- real DB unchanged;
+- 76 tests PASS.
+ENVIRONMENT_RECOVERY=
+Initial promotion gate HOLDed before Django startup because the current PowerShell process lacked DJANGO_SECRET_KEY.
+RECOVERY=
+Persistent User-level DJANGO_SECRET_KEY was loaded without printing its value; all required gates then passed and promotion completed.
+RED_REPORT_DISCREPANCY=
+Implementer reported 2 RED failures; independent auditor reproduced 3. All failures matched the same known read-side-effect defect.
+RED_DISCREPANCY_CLASSIFICATION=NONBLOCKING_REPORT_OR_PROBE_COUNT_DIFFERENCE
+AGENT_049_DISPOSITION=ARCHIVED
+AGENT_051_DISPOSITION=ARCHIVED
+
+REMAINING_BACKEND_GAPS_DISCOVERY=
+AGENT=FINANPE-REMAINING-BACKEND-GAPS-REFRESH-AUDITOR-050
+RESULT=PASS_DISCOVERY
+DISPOSITION=ARCHIVED
+CONFIRMED_OBJECTIVE_GAPS=
+- GAP-001 employee payment method validation;
+- GAP-002 invalid choice persistence in ProjetoKanban.etapa, AgendaContato.tipo and Funcionario.periodicidade.
+
+EMPLOYEE_PAYMENT_METHOD_CONTRACT=
+AGENT=FINANPE-EMPLOYEE-PAYMENT-METHOD-CONTRACT-AUDITOR-052
+RESULT=PASS_DISCOVERY
+DISPOSITION=ARCHIVED
+READY_FOR_FUTURE_IMPLEMENTATION=YES
+PRODUCT_DECISION_REQUIRED=NO
+MIGRATION_REQUIRED=NO
+CONTRACT=
+- derive valid payment methods from LancamentoFinanceiro.FORMA_PAGAMENTO_CHOICES;
+- reject any non-member with ValidationError;
+- validation before financial create;
+- zero financial mutation invalid input;
+- preserve five declared valid methods;
+- preserve standard/multiplier/custom value;
+- preserve paid/pending semantics;
+- employee repeat-payment idempotency remains out of scope.
+FUTURE_FILES=
+- apps/equipe/services.py;
+- tests/test_employee_payment_integrity.py.
+AGENT_052_DISPOSITION=ARCHIVED
+
+MODEL_CHOICE_INTEGRITY_DISCOVERY=
+AGENT=FINANPE-MODEL-CHOICE-INTEGRITY-CONTRACT-AUDITOR-053
+RESULT=PASS_DISCOVERY
+DISPOSITION=ARCHIVED
+PROVEN=
+- invalid ProjetoKanban.etapa persists;
+- invalid AgendaContato.tipo persists;
+- invalid Funcionario.periodicidade persists;
+- membership in declared choices is an objective invariant;
+- no product decision;
+- no migration;
+- recommended split into two implementation slices.
+AGENT_053_DISPOSITION=ARCHIVED
+
+PROJECT_AGENDA_CHOICE_CONTRACT=
+AGENT=FINANPE-PROJECT-AGENDA-CHOICE-INTEGRITY-ROLLOUT-AUDITOR-054
+RESULT=PASS_DISCOVERY
+DISPOSITION=ARCHIVED
+CONTRACT=
+- ProjetoKanban.clean() validates etapa membership from ETAPA_CHOICES;
+- preserve budget deadline invariant;
+- AgendaContato.clean() validates tipo membership from TIPO_CHOICES;
+- preserve satisfaction/feedback/post-sale invariants;
+- invalid choices produce zero persisted mutation;
+- no global full_clean conversion;
+- no migration;
+- no product decision.
+AGENT_054_DISPOSITION=ARCHIVED
+ORDER=GAP-001 before GAP-002
+
+EMPLOYEE_PERIODICITY_CONTRACT=
+AGENT=FINANPE-EMPLOYEE-PERIODICITY-CHOICE-CONTRACT-AUDITOR-055
+RESULT=PASS_DISCOVERY
+DISPOSITION=ARCHIVED
+READY_FOR_FUTURE_IMPLEMENTATION=YES
+PROVEN=
+- invalid Funcionario.periodicidade currently persists via save();
+- save does not validate PERIODICIDADE_CHOICES membership;
+- explicit full_clean rejects invalid periodicidade but is not the normal save path;
+- valid keys are DIARIA, SEMANAL, QUINZENAL, MENSAL;
+- all declared periodicities remain accepted;
+- minimal future fix is new Funcionario.clean() plus save()->clean();
+- validation should derive membership from PERIODICIDADE_CHOICES;
+- no global full_clean requirement;
+- invalid update must preserve prior persisted state;
+- invalid periodicidade currently leaks raw label INVALIDA through get_periodicidade_display() in payment description;
+- payment service itself does not need modification for periodicity fix;
+- no functional-file overlap with GAP-001;
+- test-file overlap is avoidable;
+- recommended future test file tests/test_employee_choice_integrity.py;
+- employee payment regression 7 tests PASS;
+- no migration;
+- no product decision;
+- real database unchanged.
+FUTURE_FILES=
+- apps/equipe/models.py;
+- tests/test_employee_choice_integrity.py.
+AGENT_055_DISPOSITION=ARCHIVED
+AGENT_055_RESULT=PASS_DISCOVERY
+
+PRODUCT_DECISION_HOLDS=
+AGENT_046_DISPOSITION=ARCHIVED_PRODUCT_DECISION_PENDING
+FINALIZATION_REPEAT_DATE_SOURCE_STAGE=PRODUCT_DECISION_PENDING
+AGENT_035_DISPOSITION=ARCHIVED_PRODUCT_AND_DATA_MODEL_DECISION_PENDING
+EMPLOYEE_REPEAT_PAYMENT=PRODUCT_AND_DATA_MODEL_DECISION_PENDING
+MONTHLY_CLOSING=HOLD_PRODUCT_DECISIONS
+ADMIN_ROLE=PRODUCT_DECISION_PENDING
+FRONTEND=PROTOTYPE_AND_FOUNDER_APPROVAL_REQUIRED
+
+AGENT_041_CREATED=NO
+AGENT_041_STARTED=NO
+AGENT_041_RESULT=NONE
+AGENT_041_DISPOSITION=NOT_CREATED
+
+PARALLEL_READ_ONLY_DISCOVERY_ACTIVE=NO
+PARALLEL_READ_ONLY_AGENT=NONE
+
+AGENT_LIFECYCLE=
+AGENT_049_DISPOSITION=ARCHIVED
+AGENT_050_DISPOSITION=ARCHIVED
+AGENT_051_DISPOSITION=ARCHIVED
+AGENT_052_DISPOSITION=ARCHIVED
+AGENT_053_DISPOSITION=ARCHIVED
+AGENT_054_DISPOSITION=ARCHIVED
+AGENT_055_DISPOSITION=ARCHIVED
+SCHEDULER_012_DISPOSITION=PERMANENT_CANONICAL_ONLY_WRITER
+
+NEXT_AGENT=FINANPE-EMPLOYEE-PAYMENT-METHOD-INTEGRITY-IMPLEMENTER-056
+NEXT_AGENT_STATUS=RESERVED_NOT_CREATED
+NEXT_SAFE_ACTION=after checkpoint 016 is integrated, create agent 056 from resulting main and implement only GAP-001 employee payment method validation.
+AGENT_056_CREATED=NO
+
+OPEN_GAPS=
+- GAP-001 employee payment method validation implementation pending;
+- GAP-002 ProjetoKanban.etapa choice validation pending;
+- GAP-002 AgendaContato.tipo choice validation pending;
+- GAP-002 Funcionario.periodicidade validation pending;
+- employee repeat payment product/data-model decision;
+- finalization repeat/date/source-stage product decisions;
+- monthly closing product decisions;
+- Admin role product decision;
+- backup visual/frontend;
+- frontend prototype + Founder approval.
+PROJECT_CLOSED=NO
+
+REJECTED_CHECKPOINT_016_CANDIDATE=cf1b745c2a1ec897032f78bca231ce92ee1bc5c5
+REJECTED_CHECKPOINT_016_CANDIDATE_PARENT=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+REJECTED_CHECKPOINT_016_CANDIDATE_REASON=agent 055 lifecycle was recorded as ACTIVE_READ_ONLY even though a completed PASS_DISCOVERY result exists and worktree existence alone is not proof of active lifecycle.
+REJECTED_CANDIDATE_INTEGRATED=NO
+REJECTED_CANDIDATE_PUSHED=NO
+REJECTED_CANDIDATE_REUSED=NO
+
+STATE_EFFECT=WhatsApp integrity was integrated and independently audited PASS; GAP-001 is the next mutable objective, GAP-002 remains contracted discovery evidence, and agent 055 is archived after PASS_DISCOVERY.
+STOP_CONDITION=do not create agent 056 in this checkpoint, do not invent a result for any completed discovery, preserve agent 041 as NOT_CREATED, and stop on any change outside docs/PROJECT_STATE.md in this mission.
+
 ## RECONCILIATION RECORD
 
 RECONCILIATION_AGENT=FINANPE-CHECKPOINT-SCHEDULER-012
-RECONCILIATION_BASE_SHA=1da3df1088fb7c20c0ff19895e47ea91ce90cd17
-RECONCILIATION_BRANCH=docs/checkpoint-scheduler-012-r14
-RECONCILIATION_WORKTREE=C:\desenvolvimento\FinanEP.worktrees\checkpoint-scheduler-012-r14
+RECONCILIATION_BASE_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+RECONCILIATION_BRANCH=docs/checkpoint-scheduler-012-r16
+RECONCILIATION_WORKTREE=C:\desenvolvimento\FinanEP.worktrees\checkpoint-scheduler-012-r16
 REJECTED_REFERENCE_CANDIDATE=ee78dee18fde13cb0e11690f5f765ba9ca257548
 REJECTED_REFERENCE_CHERRY_PICKED=NO
 REJECTED_CANDIDATE_VALIDATED=NO
@@ -1425,8 +1647,9 @@ CHECKPOINT_012_CREATED=YES
 CHECKPOINT_013_CREATED=YES
 CHECKPOINT_014_CREATED=YES
 CHECKPOINT_015_CREATED=YES
-CHECKPOINT_COUNT_AFTER=15
-CHECKPOINT_LAST_ID=PSC-2026-10-19-015
+CHECKPOINT_016_CREATED=YES
+CHECKPOINT_COUNT_AFTER=16
+CHECKPOINT_LAST_ID=PSC-2026-10-19-016
 HISTORICAL_CHRONOLOGY_CORRECTED=YES
 NO_DUPLICATE_CHECKPOINTS=YES
 CHECKPOINT_IDS_SEQUENTIAL=YES
@@ -1455,3 +1678,16 @@ AGENT_050_HEAD=1da3df1088fb7c20c0ff19895e47ea91ce90cd17
 AGENT_050_DETACHED=YES
 AGENT_050_CLEAN=YES
 AGENT_050_RESULT_AT_SNAPSHOT=NOT_YET_AVAILABLE
+AGENT_055_CONDITIONAL_SNAPSHOT_RECORDED=YES
+AGENT_055_WORKTREE=C:\desenvolvimento\FinanEP.worktrees\employee-periodicity-choice-auditor-055
+AGENT_055_HEAD=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+AGENT_055_DETACHED=YES
+AGENT_055_CLEAN=YES
+AGENT_055_DISPOSITION=ARCHIVED
+AGENT_055_RESULT=PASS_DISCOVERY
+REJECTED_CHECKPOINT_016_CANDIDATE=cf1b745c2a1ec897032f78bca231ce92ee1bc5c5
+REJECTED_CHECKPOINT_016_CANDIDATE_PARENT=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+REJECTED_CHECKPOINT_016_CANDIDATE_INTEGRATED=NO
+REJECTED_CHECKPOINT_016_CANDIDATE_PUSHED=NO
+REJECTED_CHECKPOINT_016_CANDIDATE_REUSED=NO
+REJECTED_CHECKPOINT_016_CANDIDATE_REASON=STALE_OR_AMBIGUOUS_AGENT_055_LIFECYCLE
