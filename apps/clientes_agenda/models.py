@@ -95,6 +95,14 @@ class AgendaContato(models.Model):
 
     def clean(self):
         super().clean()
+        valid_types = {
+            value for value, _label in self.TIPO_CHOICES
+        }
+        if self.tipo not in valid_types:
+            raise ValidationError({
+                'tipo': 'O tipo de contato informado é inválido.'
+            })
+
         valid_satisfactions = {
             value for value, _label in self.SATISFACAO_CHOICES
         }

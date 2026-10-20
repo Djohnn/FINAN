@@ -118,6 +118,14 @@ class ProjetoKanban(models.Model):
 
     def clean(self):
         super().clean()
+        valid_stages = {
+            value for value, _label in self.ETAPA_CHOICES
+        }
+        if self.etapa not in valid_stages:
+            raise ValidationError({
+                'etapa': 'A etapa informada é inválida.'
+            })
+
         if self.etapa == '2_ORCAMENTO' and self.data_limite_orcamento is None:
             raise ValidationError({
                 'data_limite_orcamento': (
