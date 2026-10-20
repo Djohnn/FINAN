@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -164,6 +165,122 @@ class ArchiveInputIntegrityTests(TestCase):
             )
 
         self._assert_unchanged(projeto, agenda_count)
+
+    def test_numeric_negative_fraction_days_raise_without_mutation(self):
+        """Given a numeric negative fraction; When archiving; Then preserve state."""
+        for days in (Decimal('-0.5'), -0.5):
+            with self.subTest(days=repr(days)):
+                projeto = self._project()
+                agenda_count = AgendaContato.objects.count()
+
+                with self.assertRaises(ValidationError):
+                    arquivar_orcamento_service(
+                        projeto.id,
+                        motivo_arquivamento='SEM_RETORNO',
+                        dias_lembrete_retorno=days,
+                    )
+
+                self._assert_unchanged(projeto, agenda_count)
+
+    def test_nonfinite_and_nan_days_raise_without_mutation(self):
+        """Given a nonfinite number; When archiving; Then reject without mutation."""
+        days_values = (
+            Decimal('Infinity'),
+            Decimal('-Infinity'),
+            float('inf'),
+            float('-inf'),
+            Decimal('NaN'),
+            float('nan'),
+        )
+        for days in days_values:
+            with self.subTest(days=repr(days)):
+                projeto = self._project()
+                agenda_count = AgendaContato.objects.count()
+
+                with self.assertRaises(ValidationError):
+                    arquivar_orcamento_service(
+                        projeto.id,
+                        motivo_arquivamento='SEM_RETORNO',
+                        dias_lembrete_retorno=days,
+                    )
+
+                self._assert_unchanged(projeto, agenda_count)
+
+    def test_numeric_fractional_compatibility_is_preserved(self):
+        """Given positive numeric fractions; When archiving; Then retain observed behavior."""
+        cases = (
+            (Decimal('0.5'), 0),
+            (0.5, 0),
+            (Decimal('1.5'), 1),
+            (1.5, 1),
+        )
+        hoje = timezone.localdate()
+
+        for days, expected_days in cases:
+            with self.subTest(days=repr(days)):
+                projeto = self._project()
+
+                archived = arquivar_orcamento_service(
+                    projeto.id,
+                    motivo_arquivamento='OUTRO',
+                    dias_lembrete_retorno=days,
+                )
+
+                self.assertEqual(archived.etapa, '9_ARQUIVADO')
+                self.assertEqual(
+                    AgendaContato.objects.filter(projeto=projeto).count(),
+                    int(expected_days > 0),
+                )
+                if expected_days > 0:
+                    reminder = AgendaContato.objects.get(projeto=projeto)
+                    self.assertEqual(
+                        reminder.data_agendada,
+                        hoje + timedelta(days=expected_days),
+                    )
+
+    def test_string_and_integral_compatibility_is_preserved(self):
+        """Given established inputs; When archiving; Then retain current semantics."""
+        rejected_strings = ('0.5', '1.5', '-0.5')
+        for days in rejected_strings:
+            with self.subTest(days=days):
+                projeto = self._project()
+                agenda_count = AgendaContato.objects.count()
+
+                with self.assertRaises(ValidationError):
+                    arquivar_orcamento_service(
+                        projeto.id,
+                        motivo_arquivamento='SEM_RETORNO',
+                        dias_lembrete_retorno=days,
+                    )
+
+                self._assert_unchanged(projeto, agenda_count)
+
+        accepted_inputs = (
+            (None, 0),
+            (0, 0),
+            (1, 1),
+            (Decimal('0'), 0),
+            (float(0), 0),
+            (Decimal('1'), 1),
+            (float(1), 1),
+            (' 1 ', 1),
+            ('+1', 1),
+        )
+        for days, expected_days in accepted_inputs:
+            with self.subTest(days=repr(days)):
+                projeto = self._project()
+
+                archived = arquivar_orcamento_service(
+                    projeto.id,
+                    motivo_arquivamento='OUTRO',
+                    dias_lembrete_retorno=days,
+                )
+
+                self.assertEqual(archived.etapa, '9_ARQUIVADO')
+                self.assertEqual(
+                    AgendaContato.objects.filter(projeto=projeto).count(),
+                    int(expected_days > 0),
+                )
 
     def test_none_days_archive_without_reminder(self):
         """Given no reminder days; When archiving; Then create no reminder."""

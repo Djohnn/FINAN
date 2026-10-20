@@ -155,9 +155,19 @@ def arquivar_orcamento_service(
 
     dias_normalizados = None
     if dias_lembrete_retorno is not None:
+        if isinstance(dias_lembrete_retorno, (Decimal, float)):
+            valor_numerico = Decimal(str(dias_lembrete_retorno))
+            if not valor_numerico.is_finite():
+                raise ValidationError(
+                    'Os dias do lembrete de retorno devem ser numéricos.'
+                )
+            if valor_numerico < 0:
+                raise ValidationError(
+                    'Os dias do lembrete de retorno não podem ser negativos.'
+                )
         try:
             dias_normalizados = int(dias_lembrete_retorno)
-        except (TypeError, ValueError):
+        except (OverflowError, TypeError, ValueError):
             raise ValidationError(
                 'Os dias do lembrete de retorno devem ser numéricos.'
             ) from None
