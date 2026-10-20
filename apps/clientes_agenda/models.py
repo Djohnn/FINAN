@@ -138,8 +138,12 @@ class AgendaContato(models.Model):
 
         try:
             from apps.core_sistema.models import ConfiguracaoSistema
-            config = ConfiguracaoSistema.get_solo()
-            nome_marcenaria = config.nome_marcenaria or "Marcenaria"
+            config = ConfiguracaoSistema.objects.filter(pk=1).first()
+            nome_marcenaria = (
+                config.nome_marcenaria
+                if config
+                else ConfiguracaoSistema._meta.get_field("nome_marcenaria").get_default()
+            ) or "Marcenaria"
         except Exception:
             nome_marcenaria = "Marcenaria"
 
