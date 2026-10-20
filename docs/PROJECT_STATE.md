@@ -11,35 +11,37 @@ CHECKPOINT_REMAINS_MANDATORY=YES
 CURRENT_PROJECT=FinanPE
 CURRENT_FRONT=foundation-remediation-before-frontend
 CURRENT_PHASE=backend-and-operational-gap-remediation
-CURRENT_GATE=employee-payment-method-integrity-next
+CURRENT_GATE=project-agenda-choice-integrity-next
 
-CURRENT_CANONICAL_TARGET=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+CURRENT_CANONICAL_TARGET=bb014714bf93b4f20a295527cf298e1f14aee7c8
 CURRENT_CANDIDATE_TARGET=NONE
-LAST_CANONICAL_INDEPENDENTLY_AUDITED_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+LAST_CANONICAL_INDEPENDENTLY_AUDITED_SHA=bb014714bf93b4f20a295527cf298e1f14aee7c8
 CURRENT_CANDIDATE_SHA=NONE
 
-LAST_VALIDATED_AUDIT=FINANPE-WHATSAPP-SIDE-EFFECT-AUDITOR-051
+LAST_VALIDATED_AUDIT=FINANPE-EMPLOYEE-PAYMENT-METHOD-INTEGRITY-AUDITOR-057
 LAST_VALIDATED_AUDIT_RESULT=PASS
-LATEST_INDEPENDENT_AUDIT_TARGET=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+LATEST_INDEPENDENT_AUDIT_TARGET=bb014714bf93b4f20a295527cf298e1f14aee7c8
 LATEST_INDEPENDENT_AUDIT_RESULT=PASS
 LATEST_COORDINATOR_VALIDATION_RESULT=PASS
 CURRENT_CANONICAL_TARGET_VALIDATION_MODE=INDEPENDENT_AUDIT_PASS_PLUS_FOUNDER_APPROVED_INTEGRATION
 
-LOCAL_MAIN_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
-REMOTE_MAIN_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
-CURRENT_TEST_BASELINE=76 tests PASS
+LOCAL_MAIN_SHA=bb014714bf93b4f20a295527cf298e1f14aee7c8
+REMOTE_MAIN_SHA=bb014714bf93b4f20a295527cf298e1f14aee7c8
+CURRENT_TEST_BASELINE=82 tests PASS
 REAL_DATABASE_LAST_KNOWN_HASH=FF8330AD37E7CEDD7C71222AABE07E0550338C817E909A5ADE826130683C7234
 
-CHECKPOINT_COUNT=16
-CHECKPOINT_LAST_ID=PSC-2026-10-19-016
+CHECKPOINT_COUNT=17
+CHECKPOINT_LAST_ID=PSC-2026-10-20-017
 
 ACTIVE_AGENT=NONE
 WAITING_FOR=NONE
 
 MAIN_BLOCKER=NONE preventing controlled continuation
-NEXT_SAFE_ACTION=after checkpoint 016 is integrated, create agent 056 from resulting main and implement only GAP-001 employee payment method validation
-NEXT_AGENT=FINANPE-EMPLOYEE-PAYMENT-METHOD-INTEGRITY-IMPLEMENTER-056
+NEXT_SAFE_ACTION=after checkpoint 017 is integrated, create agent 058 from resulting main and implement only ProjetoKanban.etapa + AgendaContato.tipo choice membership integrity; independently audit with agent 059
+NEXT_AGENT=FINANPE-PROJECT-AGENDA-CHOICE-INTEGRITY-IMPLEMENTER-058
 NEXT_AGENT_STATUS=RESERVED_NOT_CREATED
+NEXT_INDEPENDENT_AUDITOR=FINANPE-PROJECT-AGENDA-CHOICE-INTEGRITY-AUDITOR-059
+NEXT_INDEPENDENT_AUDITOR_STATUS=RESERVED_NOT_CREATED
 AGENT_035_DISPOSITION=ARCHIVED_PRODUCT_AND_DATA_MODEL_DECISION_PENDING
 AGENT_036_DISPOSITION=ARCHIVED
 AGENT_037_DISPOSITION=ARCHIVED
@@ -65,7 +67,10 @@ AGENT_053_DISPOSITION=ARCHIVED
 AGENT_054_DISPOSITION=ARCHIVED
 AGENT_055_DISPOSITION=ARCHIVED
 AGENT_055_RESULT=PASS_DISCOVERY
-AGENT_056_STATUS=RESERVED_NOT_CREATED
+AGENT_056_DISPOSITION=ARCHIVED
+AGENT_057_DISPOSITION=ARCHIVED
+AGENT_058_STATUS=RESERVED_NOT_CREATED
+AGENT_059_STATUS=RESERVED_NOT_CREATED
 PARALLEL_READ_ONLY_DISCOVERY_ACTIVE=NO
 PARALLEL_READ_ONLY_AGENT=NONE
 
@@ -116,7 +121,6 @@ OPEN_GAPS=
 - frontend requires approved prototype before implementation;
 - monthly closing remains HOLD_PRODUCT_DECISIONS and is not ready for implementation;
 - employee repeat payment idempotency = PRODUCT_OR_DATA_MODEL_AMBIGUITY;
-- GAP-001 employee payment method validation implementation pending;
 - GAP-002 ProjetoKanban.etapa choice validation pending;
 - GAP-002 AgendaContato.tipo choice validation pending;
 - GAP-002 Funcionario.periodicidade validation pending;
@@ -156,6 +160,10 @@ WHATSAPP_INTEGRITY_STATUS=CLOSED_INTEGRATED
 WHATSAPP_IMPLEMENTATION_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
 WHATSAPP_AUDITOR=FINANPE-WHATSAPP-SIDE-EFFECT-AUDITOR-051
 WHATSAPP_AUDIT_RESULT=PASS
+GAP_001_STATUS=CLOSED_INTEGRATED
+EMPLOYEE_PAYMENT_IMPLEMENTATION_SHA=bb014714bf93b4f20a295527cf298e1f14aee7c8
+EMPLOYEE_PAYMENT_AUDITOR=FINANPE-EMPLOYEE-PAYMENT-METHOD-INTEGRITY-AUDITOR-057
+EMPLOYEE_PAYMENT_AUDIT_RESULT=PASS
 CLIENT_AGENDA_FUTURE_FILES=
 - apps/clientes_agenda/models.py;
 - apps/clientes_agenda/services.py;
@@ -1626,12 +1634,192 @@ REJECTED_CANDIDATE_REUSED=NO
 STATE_EFFECT=WhatsApp integrity was integrated and independently audited PASS; GAP-001 is the next mutable objective, GAP-002 remains contracted discovery evidence, and agent 055 is archived after PASS_DISCOVERY.
 STOP_CONDITION=do not create agent 056 in this checkpoint, do not invent a result for any completed discovery, preserve agent 041 as NOT_CREATED, and stop on any change outside docs/PROJECT_STATE.md in this mission.
 
+### PSC-2026-10-20-017 — Integridade do método de pagamento de funcionário
+
+CHECKPOINT_ID=PSC-2026-10-20-017
+CHECKPOINT_DATE=2026-10-20
+CHECKPOINT_TIMEZONE=America/Sao_Paulo
+REPOSITORY=C:\desenvolvimento\FinanEP
+TARGET=bb014714bf93b4f20a295527cf298e1f14aee7c8
+PARENT=071092c815f5aacc8614cc789198ae3dde5aa0b5
+RESULT=PASS
+
+CHECKPOINT_SEMANTICS=POINT_IN_TIME_EVENT_SNAPSHOT
+CHECKPOINT_BLOCKS_DISCOVERY=NO
+CHECKPOINT_BLOCKS_NEW_MUTABLE_COMMIT_UNTIL_INTEGRATED=YES
+
+CANONICAL_STATE=
+- CURRENT_CANONICAL_TARGET=bb014714bf93b4f20a295527cf298e1f14aee7c8;
+- LAST_CANONICAL_INDEPENDENTLY_AUDITED_SHA=bb014714bf93b4f20a295527cf298e1f14aee7c8;
+- LATEST_INDEPENDENT_AUDIT_TARGET=bb014714bf93b4f20a295527cf298e1f14aee7c8;
+- LAST_VALIDATED_AUDIT=FINANPE-EMPLOYEE-PAYMENT-METHOD-INTEGRITY-AUDITOR-057;
+- LAST_VALIDATED_AUDIT_RESULT=PASS;
+- LOCAL_MAIN_SHA=bb014714bf93b4f20a295527cf298e1f14aee7c8;
+- REMOTE_MAIN_SHA=bb014714bf93b4f20a295527cf298e1f14aee7c8;
+- CURRENT_TEST_BASELINE=82 tests PASS;
+- REAL_DATABASE_LAST_KNOWN_HASH=FF8330AD37E7CEDD7C71222AABE07E0550338C817E909A5ADE826130683C7234.
+
+GAP_001_EMPLOYEE_PAYMENT_METHOD=
+GAP_ID=GAP-001
+STATUS=CLOSED_INTEGRATED
+IMPLEMENTER=FINANPE-EMPLOYEE-PAYMENT-METHOD-INTEGRITY-IMPLEMENTER-056
+IMPLEMENTATION_SHA=bb014714bf93b4f20a295527cf298e1f14aee7c8
+IMPLEMENTATION_PARENT=071092c815f5aacc8614cc789198ae3dde5aa0b5
+INDEPENDENT_AUDITOR=FINANPE-EMPLOYEE-PAYMENT-METHOD-INTEGRITY-AUDITOR-057
+AUDIT_RESULT=PASS
+INTEGRATED=YES
+PUSHED_TO_MAIN=YES
+CONTRACT_CLOSED=YES
+PROVEN=
+- valid payment methods derive from LancamentoFinanceiro.FORMA_PAGAMENTO_CHOICES;
+- arbitrary invalid string raises ValidationError;
+- empty payment method raises ValidationError;
+- None raises controlled ValidationError;
+- invalid method creates zero financial records;
+- invalid custom-value path creates zero financial records;
+- invalid pending-payment path creates zero financial records;
+- all declared payment methods remain accepted: PIX, CARTAO_CREDITO, CARTAO_DEBITO, DINHEIRO, BOLETO;
+- employee quantity-period contract preserved;
+- payment status semantics preserved;
+- monetary calculations unchanged;
+- employee idempotency unchanged;
+- employee periodicity unchanged;
+- no model change;
+- no migration;
+- real database unchanged;
+- 13 focused employee-payment tests PASS;
+- 8 financial-integrity regression tests PASS;
+- full suite 82 tests PASS.
+AGENT_056_DISPOSITION=ARCHIVED
+AGENT_057_DISPOSITION=ARCHIVED
+
+RED_AUDIT_EVIDENCE=
+BASE_RED=13 tests, 4 failures, 1 error
+BASE_RED_RESULT=DEFECT_REPRODUCED
+TARGET_FOCUSED=13 tests PASS
+TARGET_FULL=82 tests PASS
+TARGET_EXECUTION_PROVENANCE=independent detached auditor worktree
+IMPLEMENTER_WORKTREE_USED_BY_AUDITOR=NO
+
+PREVIOUS_CHECKPOINT_016=
+CHECKPOINT_016_STATUS=INTEGRATED
+CHECKPOINT_016_COMMIT=071092c815f5aacc8614cc789198ae3dde5aa0b5
+CHECKPOINT_016_FUNCTIONAL_TARGET=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
+REJECTED_CHECKPOINT_016_CANDIDATE=cf1b745c2a1ec897032f78bca231ce92ee1bc5c5
+REJECTED_CHECKPOINT_016_CANDIDATE_INTEGRATED=NO
+REJECTED_CHECKPOINT_016_CANDIDATE_REUSED=NO
+
+GAP_002_PROJECT_AGENDA_CONTRACT=
+CONTRACT_AUDITORS=FINANPE-MODEL-CHOICE-INTEGRITY-CONTRACT-AUDITOR-053; FINANPE-PROJECT-AGENDA-CHOICE-INTEGRITY-ROLLOUT-AUDITOR-054
+RESULT=PASS_DISCOVERY
+DISPOSITION=ARCHIVED
+NEXT_MUTABLE=ProjetoKanban.etapa membership + AgendaContato.tipo membership
+CONTRACT=
+- ProjetoKanban.clean() validates membership derived from ETAPA_CHOICES;
+- preserve current budget deadline invariant;
+- invalid etapa raises ValidationError;
+- invalid update preserves persisted project state;
+- AgendaContato.clean() validates membership derived from TIPO_CHOICES;
+- preserve satisfaction/feedback/post-sale invariants;
+- invalid tipo raises ValidationError;
+- invalid update preserves persisted agenda state;
+- no global full_clean conversion;
+- no migration;
+- no product decision.
+FUTURE_FILES=
+- apps/kanban_projetos/models.py;
+- apps/clientes_agenda/models.py;
+- tests/test_model_choice_integrity.py.
+
+GAP_002_EMPLOYEE_PERIODICITY=
+AGENT=FINANPE-EMPLOYEE-PERIODICITY-CHOICE-CONTRACT-AUDITOR-055
+RESULT=PASS_DISCOVERY
+DISPOSITION=ARCHIVED
+READY_FOR_FUTURE_IMPLEMENTATION=YES
+PENDING_LATER_SLICE=Funcionario.periodicidade membership validation
+PROVEN=
+- invalid Funcionario.periodicidade currently persists via save();
+- save does not validate PERIODICIDADE_CHOICES membership;
+- explicit full_clean rejects invalid periodicidade but is not the normal save path;
+- valid keys are DIARIA, SEMANAL, QUINZENAL, MENSAL;
+- all declared periodicities remain accepted;
+- minimal future fix is new Funcionario.clean() plus save()->clean();
+- validation should derive membership from PERIODICIDADE_CHOICES;
+- no global full_clean requirement;
+- invalid update must preserve prior persisted state;
+- invalid periodicidade currently leaks raw label INVALIDA through get_periodicidade_display() in payment description;
+- payment service itself does not need modification for periodicity fix;
+- no functional-file overlap with GAP-001;
+- test-file overlap is avoidable;
+- recommended future test file tests/test_employee_choice_integrity.py;
+- employee payment regression 7 tests PASS;
+- no migration;
+- no product decision;
+- real database unchanged.
+FUTURE_FILES=
+- apps/equipe/models.py;
+- tests/test_employee_choice_integrity.py.
+AGENT_055_DISPOSITION=ARCHIVED
+
+OBJECTIVE_IMPLEMENTATION_ORDER=
+1. GAP-001 employee payment method validation = CLOSED_INTEGRATED
+2. GAP-002 ProjetoKanban + AgendaContato choice membership = NEXT_MUTABLE
+3. GAP-002 Funcionario.periodicidade membership = PENDING_AFTER_PROJECT_AGENDA
+
+PRODUCT_DECISION_HOLDS=
+AGENT_046_DISPOSITION=ARCHIVED_PRODUCT_DECISION_PENDING
+FINALIZATION_REPEAT_DATE_SOURCE_STAGE=PRODUCT_DECISION_PENDING
+AGENT_035_DISPOSITION=ARCHIVED_PRODUCT_AND_DATA_MODEL_DECISION_PENDING
+EMPLOYEE_REPEAT_PAYMENT=PRODUCT_AND_DATA_MODEL_DECISION_PENDING
+MONTHLY_CLOSING=HOLD_PRODUCT_DECISIONS
+ADMIN_ROLE=PRODUCT_DECISION_PENDING
+FRONTEND=PROTOTYPE_AND_FOUNDER_APPROVAL_REQUIRED
+
+AGENT_041_CREATED=NO
+AGENT_041_STARTED=NO
+AGENT_041_RESULT=NONE
+AGENT_041_DISPOSITION=NOT_CREATED
+
+NEXT_AGENT=FINANPE-PROJECT-AGENDA-CHOICE-INTEGRITY-IMPLEMENTER-058
+NEXT_AGENT_STATUS=RESERVED_NOT_CREATED
+NEXT_INDEPENDENT_AUDITOR=FINANPE-PROJECT-AGENDA-CHOICE-INTEGRITY-AUDITOR-059
+NEXT_INDEPENDENT_AUDITOR_STATUS=RESERVED_NOT_CREATED
+NEXT_SAFE_ACTION=after checkpoint 017 is integrated, create agent 058 from resulting main and implement only ProjetoKanban.etapa + AgendaContato.tipo choice membership integrity; independently audit with agent 059.
+AGENT_058_CREATED=NO
+AGENT_059_CREATED=NO
+
+PARALLEL_READ_ONLY_DISCOVERY_ACTIVE=NO
+PARALLEL_READ_ONLY_AGENT=NONE
+
+AGENT_LIFECYCLE=
+AGENT_056_DISPOSITION=ARCHIVED
+AGENT_057_DISPOSITION=ARCHIVED
+AGENT_058_DISPOSITION=RESERVED_NOT_CREATED
+AGENT_059_DISPOSITION=RESERVED_NOT_CREATED
+SCHEDULER_012_DISPOSITION=PERMANENT_CANONICAL_ONLY_WRITER
+
+OPEN_GAPS=
+- GAP-002 ProjetoKanban.etapa choice membership;
+- GAP-002 AgendaContato.tipo choice membership;
+- GAP-002 Funcionario.periodicidade choice membership;
+- employee repeat-payment product/data-model decision;
+- finalization repeat/date/source-stage product decisions;
+- monthly closing product decisions;
+- Admin role product decision;
+- backup visual/frontend;
+- frontend prototype + Founder approval;
+- only other objectively proven open work.
+PROJECT_CLOSED=NO
+
+STATE_EFFECT=GAP-001 employee payment method validation was integrated and independently audited PASS; Project + Agenda choice membership is the next mutable slice; employee periodicity remains pending after it.
+STOP_CONDITION=do not create agents 058 or 059 in this checkpoint, do not infer resolutions for product-decision holds, preserve agent 041 as NOT_CREATED, and stop on any change outside docs/PROJECT_STATE.md in this mission.
+
 ## RECONCILIATION RECORD
 
 RECONCILIATION_AGENT=FINANPE-CHECKPOINT-SCHEDULER-012
-RECONCILIATION_BASE_SHA=9a4a2ff630d1fb8df9adee1d2cc2da474a9395d8
-RECONCILIATION_BRANCH=docs/checkpoint-scheduler-012-r16
-RECONCILIATION_WORKTREE=C:\desenvolvimento\FinanEP.worktrees\checkpoint-scheduler-012-r16
+RECONCILIATION_BASE_SHA=bb014714bf93b4f20a295527cf298e1f14aee7c8
+RECONCILIATION_BRANCH=docs/checkpoint-scheduler-012-r17
+RECONCILIATION_WORKTREE=C:\desenvolvimento\FinanEP.worktrees\checkpoint-scheduler-012-r17
 REJECTED_REFERENCE_CANDIDATE=ee78dee18fde13cb0e11690f5f765ba9ca257548
 REJECTED_REFERENCE_CHERRY_PICKED=NO
 REJECTED_CANDIDATE_VALIDATED=NO
@@ -1648,8 +1836,9 @@ CHECKPOINT_013_CREATED=YES
 CHECKPOINT_014_CREATED=YES
 CHECKPOINT_015_CREATED=YES
 CHECKPOINT_016_CREATED=YES
-CHECKPOINT_COUNT_AFTER=16
-CHECKPOINT_LAST_ID=PSC-2026-10-19-016
+CHECKPOINT_017_CREATED=YES
+CHECKPOINT_COUNT_AFTER=17
+CHECKPOINT_LAST_ID=PSC-2026-10-20-017
 HISTORICAL_CHRONOLOGY_CORRECTED=YES
 NO_DUPLICATE_CHECKPOINTS=YES
 CHECKPOINT_IDS_SEQUENTIAL=YES
@@ -1691,3 +1880,7 @@ REJECTED_CHECKPOINT_016_CANDIDATE_INTEGRATED=NO
 REJECTED_CHECKPOINT_016_CANDIDATE_PUSHED=NO
 REJECTED_CHECKPOINT_016_CANDIDATE_REUSED=NO
 REJECTED_CHECKPOINT_016_CANDIDATE_REASON=STALE_OR_AMBIGUOUS_AGENT_055_LIFECYCLE
+CHECKPOINT_SEQUENCE_NUMBERS_SEQUENTIAL=YES
+CHECKPOINTS_001_016_PRESERVED=YES
+AGENT_058_RESERVED_NOT_CREATED=YES
+AGENT_059_RESERVED_NOT_CREATED=YES
