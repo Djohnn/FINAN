@@ -50,5 +50,6 @@ def sincronizar_saldo_projeto(projeto_id: int | None) -> Decimal:
     ).aggregate(total=Sum('valor'))['total'] or Decimal('0.00')
     from apps.kanban_projetos.models import ProjetoKanban
 
+    ProjetoKanban.validate_monetary_magnitude('saldo_restante', total)
     ProjetoKanban.objects.filter(id=projeto_id).update(saldo_restante=total)
     return total

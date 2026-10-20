@@ -1,5 +1,5 @@
 import re
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from urllib.parse import quote
 
 from django.core.exceptions import ValidationError
@@ -132,6 +132,40 @@ class ProjetoKanban(models.Model):
                     'A etapa 2_ORCAMENTO exige uma data limite do orçamento.'
                 ),
             })
+
+        errors = {}
+        for field_name in ('valor_total', 'valor_entrada', 'saldo_restante'):
+            try:
+                self.validate_monetary_magnitude(
+                    field_name,
+                    getattr(self, field_name),
+                )
+            except ValidationError as exc:
+                errors.update(exc.message_dict)
+        if errors:
+            raise ValidationError(errors)
+
+    @classmethod
+    def validate_monetary_magnitude(cls, field_name, value) -> Decimal:
+        field = cls._meta.get_field(field_name)
+        try:
+            decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValidationError(
+                {field_name: 'Informe um valor monetário válido.'}
+            ) from exc
+
+        if not decimal_value.is_finite():
+            raise ValidationError({field_name: 'O valor deve ser finito.'})
+
+        maximum = (
+            Decimal(10) ** (field.max_digits - field.decimal_places)
+            - Decimal(10) ** (-field.decimal_places)
+        )
+        if abs(decimal_value) > maximum:
+            raise ValidationError({field_name: 'O valor excede o limite do campo.'})
+
+        return decimal_value
 
     def save(self, *args, **kwargs):
         """Persiste o card sem alterar o valor contratado ou o saldo financeiro.

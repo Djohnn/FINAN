@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -64,6 +64,29 @@ class Funcionario(models.Model):
                     'periodicidade': 'Selecione uma periodicidade válida.',
                 }
             )
+        self.validate_monetary_magnitude('valor_base', self.valor_base)
+
+    @classmethod
+    def validate_monetary_magnitude(cls, field_name, value) -> Decimal:
+        field = cls._meta.get_field(field_name)
+        try:
+            decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValidationError(
+                {field_name: 'Informe um valor monetário válido.'}
+            ) from exc
+
+        if not decimal_value.is_finite():
+            raise ValidationError({field_name: 'O valor deve ser finito.'})
+
+        maximum = (
+            Decimal(10) ** (field.max_digits - field.decimal_places)
+            - Decimal(10) ** (-field.decimal_places)
+        )
+        if abs(decimal_value) > maximum:
+            raise ValidationError({field_name: 'O valor excede o limite do campo.'})
+
+        return decimal_value
 
     def save(self, *args, **kwargs):
         self.clean()
