@@ -193,6 +193,18 @@ def reativar_orcamento_service(
     Reativa um orçamento arquivado da geladeira devolvendo para o Kanban ativo.
     """
     projeto = ProjetoKanban.objects.select_for_update().get(id=projeto_id)
+
+    if projeto.etapa != '9_ARQUIVADO':
+        raise ValidationError(
+            'Somente projetos na etapa 9_ARQUIVADO podem ser reativados.'
+        )
+
+    etapas_validas = {
+        value for value, _label in ProjetoKanban.ETAPA_CHOICES
+    }
+    if nova_etapa not in etapas_validas:
+        raise ValidationError('A nova etapa da reativação é inválida.')
+
     projeto.etapa = nova_etapa
     projeto.motivo_arquivamento = ''
     projeto.save()
