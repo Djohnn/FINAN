@@ -1,4 +1,4 @@
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -24,10 +24,7 @@ def registrar_pagamento_service(
     )
     if lancamento.status != 'PENDENTE':
         raise ValidationError("Somente lançamentos pendentes podem ser quitados.")
-    try:
-        valor_pago = Decimal(str(valor)).quantize(Decimal('0.01'))
-    except (InvalidOperation, TypeError, ValueError) as exc:
-        raise ValidationError("O valor pago é inválido.") from exc
+    valor_pago = LancamentoFinanceiro.validar_valor_monetario(valor).quantize(Decimal('0.01'))
     if valor_pago != lancamento.valor:
         raise ValidationError("O schema atual suporta apenas quitação integral do lançamento.")
     if forma_pagamento:

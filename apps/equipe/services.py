@@ -34,7 +34,7 @@ def lancar_pagamento_funcionario_service(
 
     # 1. Determina valor a pagar
     if valor_customizado is not None:
-        valor_final = Decimal(str(valor_customizado))
+        valor_final = LancamentoFinanceiro.validar_valor_monetario(valor_customizado)
     else:
         qtd = Decimal(str(quantidade_periodos))
         if qtd <= 0:

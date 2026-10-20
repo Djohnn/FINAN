@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -102,6 +102,31 @@ class LancamentoFinanceiro(models.Model):
         verbose_name_plural = "Lançamentos Financeiros"
         ordering = ["-data_vencimento", "-id"]
 
+    @classmethod
+    def validar_valor_monetario(cls, valor, *, permitir_zero=False) -> Decimal:
+        """Valida centavos exatos, finitude, magnitude e sinal sem arredondar."""
+        try:
+            valor = valor if isinstance(valor, Decimal) else Decimal(str(valor))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValidationError({'valor': 'Informe um valor monetário válido.'}) from exc
+        if not valor.is_finite():
+            raise ValidationError({'valor': 'O valor deve ser finito.'})
+        if valor < 0 or (valor == 0 and not permitir_zero):
+            raise ValidationError({'valor': 'O valor deve ser positivo.'})
+        if valor == 0:
+            return valor
+
+        field = cls._meta.get_field('valor')
+        _sign, digits, exponent = valor.as_tuple()
+        # Só dígitos não nulos além da escala exigiriam arredondamento.
+        excess_places = -exponent - field.decimal_places
+        if excess_places > 0 and any(digits[-excess_places:]):
+            raise ValidationError({'valor': 'O valor deve ser exato em centavos.'})
+        integer_digits = len(digits) + exponent
+        if integer_digits > field.max_digits - field.decimal_places:
+            raise ValidationError({'valor': 'O valor excede o limite do campo.'})
+        return valor
+
     def clean(self):
         super().clean()
         choice_sources = (
@@ -115,6 +140,10 @@ class LancamentoFinanceiro(models.Model):
             for field_name, choices in choice_sources
             if getattr(self, field_name) not in {key for key, _label in choices}
         }
+        try:
+            self.valor = self.validar_valor_monetario(self.valor)
+        except ValidationError as exc:
+            errors.update(exc.message_dict)
         if errors:
             raise ValidationError(errors)
 

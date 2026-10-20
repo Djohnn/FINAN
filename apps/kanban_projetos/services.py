@@ -27,17 +27,10 @@ def aprovar_orcamento_service(
     Aprova um orçamento no Kanban, atualizando o card para 3_APROVADO e
     gerando os lançamentos financeiros de entrada e parcelas restantes.
     """
-    try:
-        valor_total = Decimal(str(valor_total)).quantize(Decimal('0.01'))
-        valor_entrada = Decimal(str(valor_entrada)).quantize(Decimal('0.01'))
-    except (InvalidOperation, TypeError, ValueError) as exc:
-        raise ValidationError("Os valores do orçamento devem ser números válidos com até 2 casas decimais.") from exc
-
-    if valor_total <= Decimal('0.00'):
-        raise ValidationError("O valor total do projeto deve ser maior que zero.")
-
-    if valor_entrada < Decimal('0.00'):
-        raise ValidationError("O valor de entrada não pode ser negativo.")
+    valor_total = LancamentoFinanceiro.validar_valor_monetario(valor_total).quantize(Decimal('0.01'))
+    valor_entrada = LancamentoFinanceiro.validar_valor_monetario(
+        valor_entrada, permitir_zero=True,
+    ).quantize(Decimal('0.01'))
 
     if valor_entrada > valor_total:
         raise ValidationError("O valor de entrada não pode ser maior que o valor total do projeto.")
