@@ -126,6 +126,16 @@ class ProjetoKanban(models.Model):
                 'etapa': 'A etapa informada é inválida.'
             })
 
+        valid_archive_reasons = {
+            value for value, _label in self.MOTIVO_ARQUIVAMENTO_CHOICES
+        }
+        if self.motivo_arquivamento not in {'', *valid_archive_reasons}:
+            raise ValidationError({
+                'motivo_arquivamento': (
+                    'O motivo do arquivamento informado é inválido.'
+                ),
+            })
+
         if self.etapa == '2_ORCAMENTO' and self.data_limite_orcamento is None:
             raise ValidationError({
                 'data_limite_orcamento': (

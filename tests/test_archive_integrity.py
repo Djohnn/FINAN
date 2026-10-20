@@ -16,6 +16,66 @@ class ArchiveInputIntegrityTests(TestCase):
             whatsapp='11999999999',
         )
 
+    def test_model_rejects_invalid_nonempty_archive_reason_on_create(self):
+        """Given an invalid reason; When creating directly; Then reject without persistence."""
+        before = ProjetoKanban.objects.count()
+
+        for reason in ('INVALIDO', ' '):
+            with self.subTest(reason=reason):
+                with self.assertRaises(ValidationError) as caught:
+                    ProjetoKanban.objects.create(
+                        cliente=self.cliente,
+                        titulo_servico='Projeto inválido',
+                        motivo_arquivamento=reason,
+                    )
+
+                self.assertIn('motivo_arquivamento', caught.exception.message_dict)
+                self.assertEqual(ProjetoKanban.objects.count(), before)
+
+    def test_model_rejects_invalid_archive_reason_on_update_without_mutation(self):
+        """Given a persisted project; When saving an invalid reason; Then preserve its state."""
+        projeto = self._project(
+            titulo_servico='Título persistido',
+            etapa='2_ORCAMENTO',
+            data_limite_orcamento=timezone.localdate(),
+            observacao_arquivamento='Observação persistida',
+        )
+        before = ProjetoKanban.objects.values().get(pk=projeto.pk)
+
+        for reason in ('INVALIDO_UPDATE', ' '):
+            with self.subTest(reason=reason):
+                projeto.motivo_arquivamento = reason
+                with self.assertRaises(ValidationError) as caught:
+                    projeto.save()
+
+                self.assertIn('motivo_arquivamento', caught.exception.message_dict)
+                projeto.refresh_from_db()
+                self.assertEqual(
+                    ProjetoKanban.objects.values().get(pk=projeto.pk),
+                    before,
+                )
+
+    def test_model_accepts_every_declared_archive_reason_choice(self):
+        """Given each declared reason; When creating directly; Then persist it."""
+        for reason, _label in ProjetoKanban.MOTIVO_ARQUIVAMENTO_CHOICES:
+            with self.subTest(reason=reason):
+                projeto = ProjetoKanban.objects.create(
+                    cliente=self.cliente,
+                    titulo_servico='Projeto válido',
+                    motivo_arquivamento=reason,
+                )
+                self.assertEqual(projeto.motivo_arquivamento, reason)
+
+    def test_model_accepts_empty_archive_reason(self):
+        """Given an empty reason; When creating directly; Then persist it."""
+        projeto = ProjetoKanban.objects.create(
+            cliente=self.cliente,
+            titulo_servico='Projeto sem motivo',
+            motivo_arquivamento='',
+        )
+
+        self.assertEqual(projeto.motivo_arquivamento, '')
+
     def _project(self, **overrides):
         fields = {
             'cliente': self.cliente,
