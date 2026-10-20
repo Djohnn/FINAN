@@ -1,4 +1,6 @@
 from decimal import Decimal
+
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -51,6 +53,21 @@ class Funcionario(models.Model):
         verbose_name = "Funcionário"
         verbose_name_plural = "Funcionários"
         ordering = ["nome"]
+
+    def clean(self):
+        valid_periodicidades = {
+            value for value, _label in self.PERIODICIDADE_CHOICES
+        }
+        if self.periodicidade not in valid_periodicidades:
+            raise ValidationError(
+                {
+                    'periodicidade': 'Selecione uma periodicidade válida.',
+                }
+            )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.nome} ({self.funcao})"
