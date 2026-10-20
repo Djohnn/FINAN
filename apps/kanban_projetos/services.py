@@ -55,9 +55,19 @@ def aprovar_orcamento_service(
     if data_inicio_producao > data_entrega_prevista:
         raise ValidationError("A data de início não pode ser posterior à data de entrega.")
     try:
-        qtd_parcelas_restante = int(qtd_parcelas_restante)
-    except (TypeError, ValueError) as exc:
-        raise ValidationError("A quantidade de parcelas deve ser um número inteiro positivo.") from exc
+        qtd_parcelas_decimal = Decimal(str(qtd_parcelas_restante))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValidationError(
+            "A quantidade de parcelas deve ser um número inteiro positivo."
+        ) from None
+    if (
+        not qtd_parcelas_decimal.is_finite()
+        or qtd_parcelas_decimal != qtd_parcelas_decimal.to_integral_value()
+    ):
+        raise ValidationError(
+            "A quantidade de parcelas deve ser um número inteiro positivo."
+        )
+    qtd_parcelas_restante = int(qtd_parcelas_decimal)
     if qtd_parcelas_restante < 1:
         raise ValidationError("A quantidade de parcelas deve ser um número inteiro positivo.")
 
