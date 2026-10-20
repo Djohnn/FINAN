@@ -26,6 +26,12 @@ def lancar_pagamento_funcionario_service(
     """
     funcionario = Funcionario.objects.select_for_update().get(id=funcionario_id)
 
+    valid_payment_methods = {
+        value for value, _label in LancamentoFinanceiro.FORMA_PAGAMENTO_CHOICES
+    }
+    if forma_pagamento not in valid_payment_methods:
+        raise ValidationError("Forma de pagamento inválida.")
+
     # 1. Determina valor a pagar
     if valor_customizado is not None:
         valor_final = Decimal(str(valor_customizado))

@@ -86,3 +86,70 @@ class EmployeePaymentPeriodIntegrityTests(TestCase):
         lancamento = lancar_pagamento_funcionario_service(self.funcionario.pk)
 
         self.assertEqual(lancamento.valor, Decimal('100.00'))
+
+    def test_arbitrary_payment_method_is_rejected_without_financial_mutation(self):
+        initial_count = LancamentoFinanceiro.objects.count()
+
+        with self.assertRaises(ValidationError):
+            lancar_pagamento_funcionario_service(
+                self.funcionario.pk,
+                forma_pagamento='TRANSFERENCIA',
+            )
+
+        self.assertEqual(LancamentoFinanceiro.objects.count(), initial_count)
+
+    def test_empty_payment_method_is_rejected_without_financial_mutation(self):
+        initial_count = LancamentoFinanceiro.objects.count()
+
+        with self.assertRaises(ValidationError):
+            lancar_pagamento_funcionario_service(
+                self.funcionario.pk,
+                forma_pagamento='',
+            )
+
+        self.assertEqual(LancamentoFinanceiro.objects.count(), initial_count)
+
+    def test_none_payment_method_is_rejected_without_financial_mutation(self):
+        initial_count = LancamentoFinanceiro.objects.count()
+
+        with self.assertRaises(ValidationError):
+            lancar_pagamento_funcionario_service(
+                self.funcionario.pk,
+                forma_pagamento=None,
+            )
+
+        self.assertEqual(LancamentoFinanceiro.objects.count(), initial_count)
+
+    def test_all_declared_payment_methods_remain_accepted(self):
+        for payment_method, _label in LancamentoFinanceiro.FORMA_PAGAMENTO_CHOICES:
+            with self.subTest(payment_method=payment_method):
+                lancamento = lancar_pagamento_funcionario_service(
+                    self.funcionario.pk,
+                    forma_pagamento=payment_method,
+                )
+
+                self.assertEqual(lancamento.forma_pagamento, payment_method)
+
+    def test_invalid_payment_method_with_custom_value_has_no_financial_mutation(self):
+        initial_count = LancamentoFinanceiro.objects.count()
+
+        with self.assertRaises(ValidationError):
+            lancar_pagamento_funcionario_service(
+                self.funcionario.pk,
+                valor_customizado=Decimal('37.25'),
+                forma_pagamento='TRANSFERENCIA',
+            )
+
+        self.assertEqual(LancamentoFinanceiro.objects.count(), initial_count)
+
+    def test_invalid_payment_method_for_pending_payment_has_no_financial_mutation(self):
+        initial_count = LancamentoFinanceiro.objects.count()
+
+        with self.assertRaises(ValidationError):
+            lancar_pagamento_funcionario_service(
+                self.funcionario.pk,
+                forma_pagamento='TRANSFERENCIA',
+                pago_hoje=False,
+            )
+
+        self.assertEqual(LancamentoFinanceiro.objects.count(), initial_count)
