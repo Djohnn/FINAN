@@ -1,4 +1,6 @@
 from decimal import Decimal
+
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -99,6 +101,26 @@ class LancamentoFinanceiro(models.Model):
         verbose_name = "Lançamento Financeiro"
         verbose_name_plural = "Lançamentos Financeiros"
         ordering = ["-data_vencimento", "-id"]
+
+    def clean(self):
+        super().clean()
+        choice_sources = (
+            ('tipo', self.TIPO_CHOICES),
+            ('categoria', self.CATEGORIA_CHOICES),
+            ('forma_pagamento', self.FORMA_PAGAMENTO_CHOICES),
+            ('status', self.STATUS_CHOICES),
+        )
+        errors = {
+            field_name: 'Escolha inválida.'
+            for field_name, choices in choice_sources
+            if getattr(self, field_name) not in {key for key, _label in choices}
+        }
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return f"[{self.get_tipo_display()}] {self.descricao} - R$ {self.valor}"
