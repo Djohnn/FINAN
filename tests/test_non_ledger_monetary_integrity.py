@@ -20,6 +20,25 @@ from apps.kanban_projetos.services import aprovar_orcamento_service
 MAX_VALUE = Decimal('99999999.99')
 POSITIVE_OVERFLOW = Decimal('100000000.00')
 NEGATIVE_OVERFLOW = Decimal('-100000000.00')
+NEGATIVE_EXACT_CENT_VALUES = (
+    Decimal('-1.23'),
+    '-1.23',
+    -1.23,
+    Decimal('-0.01'),
+)
+ZERO_VALUES = (
+    Decimal('0'),
+    Decimal('0.00'),
+    Decimal('0.000'),
+    Decimal('-0'),
+    Decimal('-0.00'),
+    '0',
+    '0.00',
+    '-0.00',
+    0,
+    0.0,
+    -0.0,
+)
 
 
 class NonLedgerMonetaryIntegrityTests(TestCase):
@@ -76,6 +95,52 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
 
         funcionario.refresh_from_db()
         self.assertEqual(funcionario.valor_base, MAX_VALUE)
+
+    def test_funcionario_rejects_negative_exact_cent_on_create(self):
+        with self.assertRaises(ValidationError):
+            self.employee(valor_base=Decimal('-1.23'))
+
+    def test_funcionario_rejects_all_negative_exact_cent_inputs_on_create(self):
+        for value in NEGATIVE_EXACT_CENT_VALUES:
+            with self.subTest(value=value):
+                before = Funcionario.objects.count()
+                with self.assertRaises(ValidationError) as caught:
+                    self.employee(valor_base=value)
+
+                self.assert_field_error(caught, 'valor_base')
+                self.assertEqual(Funcionario.objects.count(), before)
+
+    def test_funcionario_rejects_all_negative_exact_cent_inputs_on_update(self):
+        funcionario = self.employee(
+            nome='Persistido',
+            funcao='Montador',
+            whatsapp='11988888888',
+            chave_pix='pix-test',
+            periodicidade='SEMANAL',
+            valor_base=Decimal('321.45'),
+            ativo=False,
+        )
+        before = Funcionario.objects.values().get(pk=funcionario.pk)
+
+        for value in NEGATIVE_EXACT_CENT_VALUES:
+            with self.subTest(value=value):
+                funcionario.valor_base = value
+                with self.assertRaises(ValidationError) as caught:
+                    funcionario.save()
+
+                self.assert_field_error(caught, 'valor_base')
+                funcionario.refresh_from_db()
+                self.assertEqual(
+                    Funcionario.objects.values().get(pk=funcionario.pk),
+                    before,
+                )
+
+    def test_funcionario_accepts_all_zero_representations(self):
+        for value in ZERO_VALUES:
+            with self.subTest(value=value):
+                funcionario = self.employee(valor_base=value)
+                funcionario.refresh_from_db()
+                self.assertEqual(funcionario.valor_base, Decimal('0.00'))
 
     def test_funcionario_rejects_positive_overflow_without_persistence(self):
         before = Funcionario.objects.count()
@@ -142,7 +207,6 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
             Decimal('1.230'),
             '1.230',
             1.23,
-            Decimal('-1.23'),
             Decimal('0.000'),
         )
         for value in values:
@@ -153,7 +217,14 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
                 )
 
     def test_funcionario_rejects_true_overprecision_on_create(self):
-        for value in (Decimal('1.999'), '1.999', 1.999, Decimal('-1.999')):
+        for value in (
+            Decimal('1.999'),
+            '1.999',
+            1.999,
+            Decimal('-1.999'),
+            '-1.999',
+            -1.999,
+        ):
             with self.subTest(value=value):
                 before = Funcionario.objects.count()
                 with self.assertRaises(ValidationError) as caught:
@@ -179,7 +250,14 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
         )
         before = Funcionario.objects.values().get(pk=funcionario.pk)
 
-        for value in (Decimal('1.999'), '1.999', 1.999, Decimal('-1.999')):
+        for value in (
+            Decimal('1.999'),
+            '1.999',
+            1.999,
+            Decimal('-1.999'),
+            '-1.999',
+            -1.999,
+        ):
             with self.subTest(value=value):
                 funcionario.valor_base = value
                 with self.assertRaises(ValidationError) as caught:
@@ -197,6 +275,56 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
                 projeto = self.project(**{field_name: MAX_VALUE})
                 projeto.refresh_from_db()
                 self.assertEqual(getattr(projeto, field_name), MAX_VALUE)
+
+    def test_project_rejects_negative_exact_cent_on_create(self):
+        with self.assertRaises(ValidationError):
+            self.project(valor_total=Decimal('-1.23'))
+
+    def test_project_rejects_all_negative_exact_cent_inputs_on_create(self):
+        for field_name in ('valor_total', 'valor_entrada', 'saldo_restante'):
+            for value in NEGATIVE_EXACT_CENT_VALUES:
+                with self.subTest(field_name=field_name, value=value):
+                    before = ProjetoKanban.objects.count()
+                    with self.assertRaises(ValidationError) as caught:
+                        self.project(**{field_name: value})
+
+                    self.assert_field_error(caught, field_name)
+                    self.assertEqual(ProjetoKanban.objects.count(), before)
+
+    def test_project_rejects_all_negative_exact_cent_inputs_on_update(self):
+        projeto = self.project(
+            titulo_servico='Persistido',
+            etapa='3_APROVADO',
+            valor_total=Decimal('100.00'),
+            valor_entrada=Decimal('20.00'),
+            saldo_restante=Decimal('80.00'),
+        )
+        before = ProjetoKanban.objects.values().get(pk=projeto.pk)
+
+        for field_name in ('valor_total', 'valor_entrada', 'saldo_restante'):
+            for value in NEGATIVE_EXACT_CENT_VALUES:
+                with self.subTest(field_name=field_name, value=value):
+                    setattr(projeto, field_name, value)
+                    with self.assertRaises(ValidationError) as caught:
+                        projeto.save()
+
+                    self.assert_field_error(caught, field_name)
+                    projeto.refresh_from_db()
+                    self.assertEqual(
+                        ProjetoKanban.objects.values().get(pk=projeto.pk),
+                        before,
+                    )
+
+    def test_project_accepts_all_zero_representations_for_each_field(self):
+        for field_name in ('valor_total', 'valor_entrada', 'saldo_restante'):
+            for value in ZERO_VALUES:
+                with self.subTest(field_name=field_name, value=value):
+                    projeto = self.project(**{field_name: value})
+                    projeto.refresh_from_db()
+                    self.assertEqual(
+                        getattr(projeto, field_name),
+                        Decimal('0.00'),
+                    )
 
     def test_project_rejects_overflow_on_create_for_each_monetary_field(self):
         for field_name in ('valor_total', 'valor_entrada', 'saldo_restante'):
@@ -255,7 +383,6 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
             Decimal('1.230'),
             '1.230',
             1.23,
-            Decimal('-1.23'),
             Decimal('0.000'),
         )
         for field_name in ('valor_total', 'valor_entrada', 'saldo_restante'):
@@ -268,7 +395,14 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
 
     def test_project_rejects_true_overprecision_on_create_for_each_field(self):
         for field_name in ('valor_total', 'valor_entrada', 'saldo_restante'):
-            for value in (Decimal('1.999'), '1.999', 1.999, Decimal('-1.999')):
+            for value in (
+                Decimal('1.999'),
+                '1.999',
+                1.999,
+                Decimal('-1.999'),
+                '-1.999',
+                -1.999,
+            ):
                 with self.subTest(field_name=field_name, value=value):
                     before = ProjetoKanban.objects.count()
                     with self.assertRaises(ValidationError) as caught:
@@ -292,7 +426,14 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
         before = ProjetoKanban.objects.values().get(pk=projeto.pk)
 
         for field_name in ('valor_total', 'valor_entrada', 'saldo_restante'):
-            for value in (Decimal('1.999'), '1.999', 1.999, Decimal('-1.999')):
+            for value in (
+                Decimal('1.999'),
+                '1.999',
+                1.999,
+                Decimal('-1.999'),
+                '-1.999',
+                -1.999,
+            ):
                 with self.subTest(field_name=field_name, value=value):
                     setattr(projeto, field_name, value)
                     with self.assertRaises(ValidationError) as caught:

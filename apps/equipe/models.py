@@ -92,6 +92,11 @@ class Funcionario(models.Model):
                 field_name: 'O valor deve ter no máximo duas casas decimais.',
             })
 
+        if decimal_value < 0:
+            raise ValidationError({
+                field_name: 'O valor não pode ser negativo.',
+            })
+
         return decimal_value
 
     def save(self, *args, **kwargs):
