@@ -67,6 +67,10 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
         self.assertTrue(hasattr(caught.exception, 'error_dict'))
         self.assertIn(field_name, caught.exception.message_dict)
 
+    def assert_scale_error(self, caught, field_name):
+        self.assert_field_error(caught, field_name)
+        self.assertIn('duas casas decimais', str(caught.exception))
+
     def test_funcionario_accepts_maximum_representable_magnitude(self):
         funcionario = self.employee(valor_base=MAX_VALUE)
 
@@ -132,12 +136,59 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
     def test_funcionario_negative_infinity_is_controlled_validation_error(self):
         self.assert_funcionario_nonfinite_rejected(Decimal('-Infinity'))
 
-    def test_funcionario_compatibility_values_are_not_rejected_by_magnitude(self):
-        for value in (Decimal('0'), Decimal('-1.23'), Decimal('1.999')):
+    def test_funcionario_compatibility_values_are_scale_valid(self):
+        values = (
+            Decimal('1.23'),
+            Decimal('1.230'),
+            '1.230',
+            1.23,
+            Decimal('-1.23'),
+            Decimal('0.000'),
+        )
+        for value in values:
             with self.subTest(value=value):
                 funcionario = self.employee(valor_base=value)
                 self.assertTrue(
                     Funcionario.objects.filter(pk=funcionario.pk).exists()
+                )
+
+    def test_funcionario_rejects_true_overprecision_on_create(self):
+        for value in (Decimal('1.999'), '1.999', 1.999, Decimal('-1.999')):
+            with self.subTest(value=value):
+                before = Funcionario.objects.count()
+                with self.assertRaises(ValidationError) as caught:
+                    Funcionario.objects.create(
+                        nome='Funcionário overprecision',
+                        funcao='Marceneiro',
+                        periodicidade='MENSAL',
+                        valor_base=value,
+                    )
+
+                self.assert_scale_error(caught, 'valor_base')
+                self.assertEqual(Funcionario.objects.count(), before)
+
+    def test_funcionario_overprecision_update_preserves_all_persisted_fields(self):
+        funcionario = self.employee(
+            nome='Persistido',
+            funcao='Montador',
+            whatsapp='11988888888',
+            chave_pix='pix-test',
+            periodicidade='SEMANAL',
+            valor_base=Decimal('321.45'),
+            ativo=False,
+        )
+        before = Funcionario.objects.values().get(pk=funcionario.pk)
+
+        for value in (Decimal('1.999'), '1.999', 1.999, Decimal('-1.999')):
+            with self.subTest(value=value):
+                funcionario.valor_base = value
+                with self.assertRaises(ValidationError) as caught:
+                    funcionario.save()
+                self.assert_scale_error(caught, 'valor_base')
+                funcionario.refresh_from_db()
+                self.assertEqual(
+                    Funcionario.objects.values().get(pk=funcionario.pk),
+                    before,
                 )
 
     def test_project_accepts_maximum_magnitude_for_each_monetary_field(self):
@@ -198,13 +249,59 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
     def test_project_saldo_restante_nonfinite_is_controlled_and_field_specific(self):
         self.assert_project_nonfinite_rejected('saldo_restante')
 
-    def test_project_compatibility_values_are_not_rejected_by_magnitude(self):
+    def test_project_compatibility_values_are_scale_valid(self):
+        values = (
+            Decimal('1.23'),
+            Decimal('1.230'),
+            '1.230',
+            1.23,
+            Decimal('-1.23'),
+            Decimal('0.000'),
+        )
         for field_name in ('valor_total', 'valor_entrada', 'saldo_restante'):
-            for value in (Decimal('0'), Decimal('-1.23'), Decimal('1.999')):
+            for value in values:
                 with self.subTest(field_name=field_name, value=value):
                     projeto = self.project(**{field_name: value})
                     self.assertTrue(
                         ProjetoKanban.objects.filter(pk=projeto.pk).exists()
+                    )
+
+    def test_project_rejects_true_overprecision_on_create_for_each_field(self):
+        for field_name in ('valor_total', 'valor_entrada', 'saldo_restante'):
+            for value in (Decimal('1.999'), '1.999', 1.999, Decimal('-1.999')):
+                with self.subTest(field_name=field_name, value=value):
+                    before = ProjetoKanban.objects.count()
+                    with self.assertRaises(ValidationError) as caught:
+                        ProjetoKanban.objects.create(
+                            cliente=self.client_record,
+                            titulo_servico='Projeto overprecision',
+                            **{field_name: value},
+                        )
+
+                    self.assert_scale_error(caught, field_name)
+                    self.assertEqual(ProjetoKanban.objects.count(), before)
+
+    def test_project_overprecision_update_preserves_all_persisted_fields(self):
+        projeto = self.project(
+            titulo_servico='Persistido',
+            etapa='3_APROVADO',
+            valor_total=Decimal('100.00'),
+            valor_entrada=Decimal('20.00'),
+            saldo_restante=Decimal('80.00'),
+        )
+        before = ProjetoKanban.objects.values().get(pk=projeto.pk)
+
+        for field_name in ('valor_total', 'valor_entrada', 'saldo_restante'):
+            for value in (Decimal('1.999'), '1.999', 1.999, Decimal('-1.999')):
+                with self.subTest(field_name=field_name, value=value):
+                    setattr(projeto, field_name, value)
+                    with self.assertRaises(ValidationError) as caught:
+                        projeto.save()
+                    self.assert_scale_error(caught, field_name)
+                    projeto.refresh_from_db()
+                    self.assertEqual(
+                        ProjetoKanban.objects.values().get(pk=projeto.pk),
+                        before,
                     )
 
     def test_aggregate_sync_persists_representable_total(self):

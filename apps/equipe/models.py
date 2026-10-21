@@ -86,6 +86,12 @@ class Funcionario(models.Model):
         if abs(decimal_value) > maximum:
             raise ValidationError({field_name: 'O valor excede o limite do campo.'})
 
+        quantum = Decimal(1).scaleb(-field.decimal_places)
+        if decimal_value.quantize(quantum) != decimal_value:
+            raise ValidationError({
+                field_name: 'O valor deve ter no máximo duas casas decimais.',
+            })
+
         return decimal_value
 
     def save(self, *args, **kwargs):
