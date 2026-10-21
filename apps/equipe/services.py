@@ -9,6 +9,58 @@ from apps.financeiro.models import LancamentoFinanceiro
 from .models import Funcionario
 
 
+def _normalize_observacao(observacao: str | None) -> str:
+    return (observacao or '').strip()
+
+
+def _payment_description_prefix(funcionario: Funcionario) -> str:
+    periodicidade = funcionario.get_periodicidade_display()
+    return f"Pagamento equipe - {funcionario.nome} ({periodicidade})"
+
+
+def _extract_service_observacao(
+    descricao: str,
+    funcionario: Funcionario,
+) -> str | None:
+    prefix = _payment_description_prefix(funcionario)
+    if descricao == prefix:
+        return ''
+    if not descricao.startswith(prefix):
+        return None
+
+    suffix = descricao[len(prefix):]
+    if suffix.startswith(' - '):
+        observacao = suffix[3:]
+        return (
+            observacao
+            if observacao and observacao == observacao.strip()
+            else None
+        )
+
+    if not suffix.startswith(' ['):
+        return None
+
+    quantity_end = suffix.find(']')
+    if quantity_end <= 2:
+        return None
+    quantity_annotation = suffix[2:quantity_end]
+    periodicidade_display = funcionario.get_periodicidade_display()
+    if not quantity_annotation.endswith(f" {periodicidade_display}(s)"):
+        return None
+
+    observation_suffix = suffix[quantity_end + 1:]
+    if not observation_suffix:
+        return ''
+    if not observation_suffix.startswith(' - '):
+        return None
+    observacao = observation_suffix[3:]
+    return (
+        observacao
+        if observacao and observacao == observacao.strip()
+        else None
+    )
+
+
 @transaction.atomic
 def lancar_pagamento_funcionario_service(
     funcionario_id: int,
@@ -50,12 +102,33 @@ def lancar_pagamento_funcionario_service(
     status = 'PAGO' if pago_hoje else 'PENDENTE'
     data_pagamento = hoje if pago_hoje else None
 
+    observacao_normalizada = _normalize_observacao(observacao)
+
     # 3. Monta descrição detalhada
-    desc_base = f"Pagamento equipe - {funcionario.nome} ({funcionario.get_periodicidade_display()})"
+    desc_base = _payment_description_prefix(funcionario)
     if quantidade_periodos and quantidade_periodos != 1:
         desc_base += f" [{quantidade_periodos} {funcionario.get_periodicidade_display()}(s)]"
-    if observacao and observacao.strip():
-        desc_base += f" - {observacao.strip()}"
+    if observacao_normalizada:
+        desc_base += f" - {observacao_normalizada}"
+
+    existing_lancamento = (
+        LancamentoFinanceiro.objects
+        .filter(
+            tipo='SAIDA',
+            categoria='FUNCIONARIO',
+            funcionario=funcionario,
+            data_vencimento=vencimento,
+            valor=valor_final,
+            forma_pagamento=forma_pagamento,
+            status=status,
+            descricao__startswith=_payment_description_prefix(funcionario),
+        )
+        .order_by('pk')
+    )
+    for candidate in existing_lancamento:
+        if _extract_service_observacao(candidate.descricao, funcionario) == observacao_normalizada:
+            candidate.foi_criado = False
+            return candidate
 
     # 4. Registra saída no financeiro
     lancamento = LancamentoFinanceiro.objects.create(
@@ -69,5 +142,6 @@ def lancar_pagamento_funcionario_service(
         data_pagamento=data_pagamento,
         status=status,
     )
+    lancamento.foi_criado = True
 
     return lancamento
