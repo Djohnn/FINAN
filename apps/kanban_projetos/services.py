@@ -165,6 +165,10 @@ def arquivar_orcamento_service(
                 raise ValidationError(
                     'Os dias do lembrete de retorno não podem ser negativos.'
                 )
+            if valor_numerico != valor_numerico.to_integral_value():
+                raise ValidationError(
+                    'Os dias do lembrete de retorno devem ser números inteiros.'
+                )
         try:
             dias_normalizados = int(dias_lembrete_retorno)
         except (OverflowError, TypeError, ValueError):

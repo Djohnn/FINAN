@@ -206,37 +206,23 @@ class ArchiveInputIntegrityTests(TestCase):
 
                 self._assert_unchanged(projeto, agenda_count)
 
-    def test_numeric_fractional_compatibility_is_preserved(self):
-        """Given positive numeric fractions; When archiving; Then retain observed behavior."""
-        cases = (
-            (Decimal('0.5'), 0),
-            (0.5, 0),
-            (Decimal('1.5'), 1),
-            (1.5, 1),
-        )
-        hoje = timezone.localdate()
+    def test_positive_numeric_fraction_days_raise_without_mutation(self):
+        """Given positive numeric fractions; When archiving; Then reject without mutation."""
+        cases = (Decimal('0.5'), 0.5, Decimal('1.5'), 1.5)
 
-        for days, expected_days in cases:
+        for days in cases:
             with self.subTest(days=repr(days)):
                 projeto = self._project()
+                agenda_count = AgendaContato.objects.count()
 
-                archived = arquivar_orcamento_service(
-                    projeto.id,
-                    motivo_arquivamento='OUTRO',
-                    dias_lembrete_retorno=days,
-                )
-
-                self.assertEqual(archived.etapa, '9_ARQUIVADO')
-                self.assertEqual(
-                    AgendaContato.objects.filter(projeto=projeto).count(),
-                    int(expected_days > 0),
-                )
-                if expected_days > 0:
-                    reminder = AgendaContato.objects.get(projeto=projeto)
-                    self.assertEqual(
-                        reminder.data_agendada,
-                        hoje + timedelta(days=expected_days),
+                with self.assertRaises(ValidationError):
+                    arquivar_orcamento_service(
+                        projeto.id,
+                        motivo_arquivamento='OUTRO',
+                        dias_lembrete_retorno=days,
                     )
+
+                self._assert_unchanged(projeto, agenda_count)
 
     def test_string_and_integral_compatibility_is_preserved(self):
         """Given established inputs; When archiving; Then retain current semantics."""
