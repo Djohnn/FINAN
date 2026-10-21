@@ -240,6 +240,11 @@ def finalizar_projeto_service(
     de Pós-Venda para daqui a 30 dias.
     """
     projeto = ProjetoKanban.objects.select_for_update().get(id=projeto_id)
+    if projeto.etapa != '5_ENTREGA':
+        raise ValidationError(
+            'Somente projetos na etapa 5_ENTREGA podem ser finalizados.'
+        )
+
     hoje = timezone.localdate()
 
     if quitar_pendencias and forma_pagamento_quitacao:
@@ -248,7 +253,8 @@ def finalizar_projeto_service(
             raise ValidationError("A forma de pagamento da quitação é inválida.")
 
     projeto.etapa = '6_FINALIZADO'
-    projeto.data_entrega_realizada = hoje
+    if projeto.data_entrega_realizada is None:
+        projeto.data_entrega_realizada = hoje
     projeto.save()
 
     # 1. Se o cliente quitou na entrega, baixa os lançamentos pendentes

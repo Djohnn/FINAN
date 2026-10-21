@@ -1,3 +1,4 @@
+import inspect
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -34,6 +35,11 @@ class FinancialIntegrityTests(TestCase):
             'data_entrega_prevista': self.hoje + timedelta(days=30),
             'qtd_parcelas_restante': 3,
         }
+
+    def move_to_delivery(self):
+        self.projeto.refresh_from_db()
+        self.projeto.etapa = '5_ENTREGA'
+        self.projeto.save(update_fields=['etapa', 'atualizado_em'])
 
     def test_aprovacao_rejeita_parcelamento_com_parcela_nao_positiva(self):
         """Given saldo insuficiente; When aprovar; Then rejeitar sem mutacao."""
@@ -83,6 +89,7 @@ class FinancialIntegrityTests(TestCase):
     def test_finalizacao_com_quitacao_sincroniza_saldo_persistido(self):
         """Given projeto aprovado e saldo; When quitar na entrega; Then ambos saldos zero."""
         aprovar_orcamento_service(**self.kwargs)
+        self.move_to_delivery()
         self.projeto.refresh_from_db()
         self.assertEqual(self.projeto.saldo_restante, Decimal('8.00'))
         resultado = finalizar_projeto_service(self.projeto.pk, quitar_pendencias=True)
@@ -98,6 +105,7 @@ class FinancialIntegrityTests(TestCase):
     def test_finalizacao_sem_quitacao_preserva_saldo(self):
         """Given saldo pendente; When finalizar sem quitar; Then preservar divida."""
         aprovar_orcamento_service(**self.kwargs)
+        self.move_to_delivery()
         finalizar_projeto_service(self.projeto.pk, quitar_pendencias=False)
         self.projeto.refresh_from_db()
         self.assertEqual(self.projeto.lancamentos.filter(status='PENDENTE').count(), 3)
@@ -109,6 +117,7 @@ class FinancialIntegrityTests(TestCase):
     def test_finalizacao_quita_entrada_mas_preserva_saida_pendente(self):
         """Given entrada e saida pendentes; When quitar; Then somente entrada paga."""
         aprovar_orcamento_service(**self.kwargs)
+        self.move_to_delivery()
         saida = LancamentoFinanceiro.objects.create(
             tipo='SAIDA',
             categoria='OUTROS',
@@ -137,6 +146,7 @@ class FinancialIntegrityTests(TestCase):
     def test_finalizacao_rejeita_forma_invalida_sem_mutacao(self):
         """Given entrada pendente; When forma inválida; Then falhar sem mutação."""
         aprovar_orcamento_service(**self.kwargs)
+        self.move_to_delivery()
         projeto_antes = ProjetoKanban.objects.values(
             'etapa', 'data_entrega_realizada', 'saldo_restante',
         ).get(pk=self.projeto.pk)
@@ -186,6 +196,7 @@ class FinancialIntegrityTests(TestCase):
     def test_finalizacao_com_forma_valida_quita_apenas_entradas(self):
         """Given entrada e saída pendentes; When forma válida; Then preservar saída."""
         aprovar_orcamento_service(**self.kwargs)
+        self.move_to_delivery()
         saida = LancamentoFinanceiro.objects.create(
             tipo='SAIDA',
             categoria='OUTROS',
@@ -230,6 +241,7 @@ class FinancialIntegrityTests(TestCase):
     def test_finalizacao_reverte_quitacao_se_pos_venda_falhar(self):
         """Given aprovacao; When falhar apos quitar; Then rollback integral."""
         aprovar_orcamento_service(**self.kwargs)
+        self.move_to_delivery()
         estado = ProjetoKanban.objects.values().get(pk=self.projeto.pk)
         lancamentos = list(self.projeto.lancamentos.order_by('id').values())
         with patch(
@@ -240,3 +252,115 @@ class FinancialIntegrityTests(TestCase):
         self.assertEqual(ProjetoKanban.objects.values().get(pk=self.projeto.pk), estado)
         self.assertEqual(list(self.projeto.lancamentos.order_by('id').values()), lancamentos)
         self.assertEqual(AgendaContato.objects.count(), 0)
+
+    def test_finalizacao_valida_define_etapa_e_data_quando_data_vazia(self):
+        self.move_to_delivery()
+
+        resultado = finalizar_projeto_service(self.projeto.pk)
+
+        self.projeto.refresh_from_db()
+        self.assertEqual(resultado.etapa, '6_FINALIZADO')
+        self.assertEqual(self.projeto.etapa, '6_FINALIZADO')
+        self.assertEqual(self.projeto.data_entrega_realizada, self.hoje)
+
+    def test_finalizacao_preserva_data_de_entrega_existente(self):
+        data_anterior = self.hoje - timedelta(days=2)
+        self.projeto.etapa = '5_ENTREGA'
+        self.projeto.data_entrega_realizada = data_anterior
+        self.projeto.save(update_fields=['etapa', 'data_entrega_realizada', 'atualizado_em'])
+
+        finalizar_projeto_service(self.projeto.pk)
+
+        self.projeto.refresh_from_db()
+        self.assertEqual(self.projeto.data_entrega_realizada, data_anterior)
+
+    def test_finalizacao_rejeita_repeticao_sem_mutacao(self):
+        self.move_to_delivery()
+        finalizar_projeto_service(self.projeto.pk)
+        projeto_antes = ProjetoKanban.objects.values().get(pk=self.projeto.pk)
+        lancamentos_antes = list(
+            LancamentoFinanceiro.objects.filter(projeto=self.projeto).order_by('id').values()
+        )
+        agenda_antes = list(
+            AgendaContato.objects.filter(projeto=self.projeto).order_by('id').values()
+        )
+
+        with self.assertRaises(ValidationError):
+            finalizar_projeto_service(self.projeto.pk)
+
+        self.assertEqual(ProjetoKanban.objects.values().get(pk=self.projeto.pk), projeto_antes)
+        self.assertEqual(
+            list(LancamentoFinanceiro.objects.filter(projeto=self.projeto).order_by('id').values()),
+            lancamentos_antes,
+        )
+        self.assertEqual(
+            list(AgendaContato.objects.filter(projeto=self.projeto).order_by('id').values()),
+            agenda_antes,
+        )
+
+    def test_finalizacao_rejeita_origem_fora_de_entrega_sem_mutacao(self):
+        aprovar_orcamento_service(**self.kwargs)
+        projeto_antes = ProjetoKanban.objects.values().get(pk=self.projeto.pk)
+        lancamentos_antes = list(
+            LancamentoFinanceiro.objects.filter(projeto=self.projeto).order_by('id').values()
+        )
+        agenda_count_antes = AgendaContato.objects.filter(
+            projeto=self.projeto, tipo='POS_VENDA_30_DIAS'
+        ).count()
+
+        with self.assertRaises(ValidationError):
+            finalizar_projeto_service(
+                self.projeto.pk,
+                quitar_pendencias=True,
+                forma_pagamento_quitacao='DINHEIRO',
+            )
+
+        self.assertEqual(ProjetoKanban.objects.values().get(pk=self.projeto.pk), projeto_antes)
+        self.assertEqual(
+            list(LancamentoFinanceiro.objects.filter(projeto=self.projeto).order_by('id').values()),
+            lancamentos_antes,
+        )
+        self.assertEqual(
+            AgendaContato.objects.filter(projeto=self.projeto, tipo='POS_VENDA_30_DIAS').count(),
+            agenda_count_antes,
+        )
+
+    def test_finalizacao_rejeita_todas_as_origens_invalidas(self):
+        for etapa in (
+            '1_CONTATO',
+            '2_ORCAMENTO',
+            '3_APROVADO',
+            '4_PRODUCAO',
+            '6_FINALIZADO',
+            '9_ARQUIVADO',
+        ):
+            with self.subTest(etapa=etapa):
+                self.projeto.etapa = etapa
+                self.projeto.save(update_fields=['etapa', 'atualizado_em'])
+                with self.assertRaises(ValidationError):
+                    finalizar_projeto_service(self.projeto.pk)
+
+    def test_finalizacao_valida_nao_duplica_pos_venda_existente(self):
+        self.move_to_delivery()
+        AgendaContato.objects.create(
+            cliente=self.projeto.cliente,
+            projeto=self.projeto,
+            tipo='POS_VENDA_30_DIAS',
+            data_agendada=self.hoje + timedelta(days=30),
+        )
+
+        finalizar_projeto_service(self.projeto.pk)
+
+        self.assertEqual(
+            AgendaContato.objects.filter(
+                projeto=self.projeto, tipo='POS_VENDA_30_DIAS'
+            ).count(),
+            1,
+        )
+
+    def test_finalizacao_nao_expoe_parametro_de_data_manual(self):
+        parametros = inspect.signature(finalizar_projeto_service).parameters
+        self.assertEqual(
+            list(parametros),
+            ['projeto_id', 'quitar_pendencias', 'forma_pagamento_quitacao'],
+        )
