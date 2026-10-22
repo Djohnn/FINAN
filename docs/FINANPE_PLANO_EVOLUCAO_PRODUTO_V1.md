@@ -53,7 +53,7 @@ Entram no plano todas as melhorias adicionais aprovadas pelo Founder:
 
 O **Fechamento Mensal / Semáforo**, apesar de já existir no PRD original, também aparece na sequência abaixo porque é uma dependência importante para relatórios e para a tela “Hoje”.
 
-A idempotência de pagamento de funcionário (`1A,2A,3A`) continua como frente corrente e deve ser concluída antes de abrir estas novas frentes mutáveis.
+A idempotência de pagamento de funcionário (`1A,2A,3A`) está integrada e não permanece como frente futura desta expansão.
 
 ---
 
@@ -83,7 +83,7 @@ O histórico de ações, por exemplo, é prioridade média para o usuário, mas 
 
 ## 4.1 Idempotência de pagamento de funcionário
 
-**Estado:** decisão de produto fechada; implementação/auditoria em andamento no momento desta redação.
+**Estado:** INTEGRADA — decisões 1A/2A/3A fechadas, implementação e auditoria concluídas.
 
 ### Contrato aprovado
 
@@ -119,6 +119,7 @@ Somente abrir a primeira nova frente mutável após:
 # 5. FASE 1 — Recuperação de backup / Disaster Recovery
 
 **Prioridade:** CRÍTICA
+**Estado:** INTEGRADA / CLOSED_INTEGRATED
 **Objetivo:** garantir não apenas que existe backup, mas que os dados podem ser recuperados com segurança.
 
 ## 5.1 Problema
@@ -168,6 +169,10 @@ Não criar restauração automática em background.
 - testes não usam o banco real de negócio;
 - procedimento de recuperação é documentado e reproduzível.
 
+**Resultado V1:** a restauração segura foi implementada, auditada e integrada.
+A persistência de eventos de restauração no histórico operacional foi
+deliberadamente deferida para a FASE 2, sem caracterizar falha desta frente.
+
 ## 5.5 Decisões de produto futuras
 
 Antes da UI de restauração, Founder deve aprovar:
@@ -182,6 +187,7 @@ Antes da UI de restauração, Founder deve aprovar:
 
 **Prioridade de produto:** MÉDIA
 **Prioridade técnica:** ALTA por dependência
+**Estado:** PLANEJADA — NEXT
 
 ## 6.1 Objetivo
 
@@ -820,23 +826,23 @@ Tela “Hoje” + integração visual dos módulos já estabilizados.
 
 # 19. Próxima ação recomendada
 
-1. concluir a frente corrente de idempotência de pagamento de funcionário;
-2. após integração e cleanup, abrir auditoria contratual **read-only** da restauração de backup;
-3. fechar o contrato técnico da recuperação antes de qualquer implementação destrutiva;
-4. implementar e auditar a restauração;
-5. seguir a sequência deste documento.
+1. abrir discovery contratual **read-only** do histórico de ações importantes;
+2. definir o escopo V1 e os eventos mínimos sem inventar schema final;
+3. implementar e auditar o histórico antes das próximas frentes mutáveis;
+4. seguir a sequência deste documento.
 
-A restauração de backup deve ser tratada como a primeira nova capacidade desta expansão porque é a única lacuna cuja ausência pode transformar uma falha de equipamento em perda irreversível da operação.
+O histórico entra agora porque as próximas capacidades já devem nascer
+registrando eventos importantes, evitando retrofit.
 
 ---
 
 # 20. Status das frentes propostas
 
-| Frente | Status inicial |
+| Frente | Status atual |
 |---|---|
-| Idempotência pagamento funcionário | EM ANDAMENTO — contrato aprovado |
-| Restauração de backup | PLANEJADA — próxima nova frente |
-| Histórico de ações | PLANEJADA |
+| Idempotência pagamento funcionário | INTEGRADA |
+| Restauração de backup | INTEGRADA / CLOSED_INTEGRATED |
+| Histórico de ações | PLANEJADA — NEXT |
 | Fechamento mensal | PENDENTE — requisito original + decisões de produto |
 | Central de cobrança | PLANEJADA |
 | Lucro por projeto | PLANEJADA — há decisão futura sobre mão de obra/projeto |
