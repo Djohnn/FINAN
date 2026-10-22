@@ -1,10 +1,10 @@
 # FinanPE — Plano de Evolução de Produto V1+
 
-**Status do documento:** Proposta de extensão oficial do produto
-**Data-base:** 2026-10-21
+**Status do documento:** Plano de evolução de produto aprovado pelo Founder; capacidades futuras permanecem planejadas
+**Data-base:** 2026-10-22
 **Modo do produto:** local-first, Windows, SQLite, single-user, sem login na V1
-**Base canônica no momento da redação:** `24cbc1c8e9635c0be737f472c1b39498aebbf439`
-**Baseline canônico no momento da redação:** 193 testes PASS
+**Base canônica no momento da redação:** `f370fdac09c5ef9d58869f619fecaafff25e3774`
+**Baseline canônico no momento da redação:** 307 testes PASS
 **Documento complementar a:** `docs/PRD_CONTEXT.md`, `docs/DATABASE_SCHEMA.md`, `docs/ROADMAP_PROMPTS.md`
 
 ---
@@ -65,10 +65,10 @@ O histórico de ações, por exemplo, é prioridade média para o usuário, mas 
 
 | Ordem | Frente | Prioridade de produto | Motivo da posição |
 |---|---|---|---|
-| 0 | Concluir idempotência de pagamento de funcionário | Núcleo atual | Fecha risco financeiro já aberto |
-| 1 | Restauração de backup / recuperação | **Crítica** | Evita perda definitiva da empresa em falha de disco/DB |
-| 2 | Histórico de ações importantes | Média, elevada por dependência | Evita retrofit nas próximas frentes |
-| 3 | Fechamento Mensal / Semáforo | **Muito alta** | Fecha núcleo financeiro já previsto e alimenta indicadores |
+| 0 | Idempotência de pagamento de funcionário | Núcleo concluído | Risco financeiro integrado e auditado |
+| 1 | Restauração de backup / recuperação | **Crítica — concluída** | Evita perda definitiva da empresa em falha de disco/DB |
+| 2 | Histórico de ações importantes | Integrada | Evita retrofit nas próximas frentes |
+| 3 | Fechamento Mensal / Semáforo | **Muito alta — próxima frente condicionada a decisões** | Fecha núcleo financeiro já previsto e alimenta indicadores |
 | 4 | Central de contas a receber / cobrança | **Muito alta** | Impacto direto em caixa e inadimplência |
 | 5 | Lucro/margem por projeto | **Muito alta** | Mostra quais serviços realmente geram resultado |
 | 6 | Visão 360° do cliente | Alta | Concentra memória comercial e operacional |
@@ -187,55 +187,60 @@ Antes da UI de restauração, Founder deve aprovar:
 
 **Prioridade de produto:** MÉDIA
 **Prioridade técnica:** ALTA por dependência
-**Estado:** PLANEJADA — NEXT
+**Estado:** INTEGRADA / CLOSED_INTEGRATED
 
-## 6.1 Objetivo
+## 6.1 Contrato V1 integrado
 
-Permitir descobrir depois o que aconteceu com projetos, pagamentos e eventos operacionais sem depender da memória do usuário.
+O FinanPE registra ações importantes em `apps.core_sistema.EventoSistema`.
+O histórico V1 é append-only, somente leitura no Admin técnico e limitado a
+seletores bounded.
 
-## 6.2 Princípio
+Os 11 tipos de evento integrados são:
 
-O histórico deve ser simples e append-only.
+- `ORCAMENTO_APROVADO`;
+- `ORCAMENTO_ARQUIVADO`;
+- `ORCAMENTO_REATIVADO`;
+- `PROJETO_FINALIZADO`;
+- `PAGAMENTO_FUNCIONARIO_CRIADO`;
+- `LANCAMENTO_QUITADO`;
+- `CONTATO_CONCLUIDO`;
+- `BACKUP_CONCLUIDO`;
+- `BACKUP_FALHOU`;
+- `RESTAURACAO_CONCLUIDA`;
+- `RESTAURACAO_FALHOU_ROLLBACK_OK`.
 
-Não é necessário criar autenticação, trilha multiusuário ou infraestrutura de auditoria corporativa na V1.
+Os domínios V1 são `KANBAN`, `EQUIPE`, `FINANCEIRO`, `AGENDA`, `BACKUP`
+e `RESTAURACAO`.
 
-## 6.3 Eventos mínimos recomendados
+## 6.2 Semântica integrada
 
-Registrar eventos importantes como:
+Eventos de negócio são criados na mesma transação atômica da mutação.
+Falha na escrita do histórico faz rollback da mutação de negócio. Retries
+idempotentes e transições sem mudança não criam eventos duplicados.
 
-- orçamento aprovado;
-- orçamento arquivado;
-- orçamento reativado;
-- mudança relevante de etapa;
-- projeto finalizado;
-- pagamento de funcionário criado ou retry reutilizado;
-- lançamento cancelado;
-- contato/pós-venda concluído;
-- backup concluído/falhado;
-- restauração executada;
-- despesa recorrente gerada;
-- cobrança marcada/concluída, se essa ação for criada posteriormente.
+Um pagamento de funcionário recém-criado gera evento; retry idêntico que
+reutiliza a linha existente não gera novo evento. Não há evento genérico de
+mudança de etapa além dos 11 tipos congelados.
 
-## 6.4 Modelo recomendado
+Falha de histórico em manutenção não destrói backup válido, não desfaz
+restauração válida e não invalida rollback verificado; a falha é exposta por
+aviso controlado.
 
-Criar entidade simples, por exemplo `EventoSistema` ou `HistoricoOperacao`, com:
+Metadados monetários usam strings canônicas com duas casas decimais e IDs de
+entidade usam strings decimais ASCII positivas. Não são aceitos secrets ou
+free-text sensível arbitrário.
 
-- tipo do evento;
-- entidade/domínio relacionado;
-- identificador do registro relacionado;
-- descrição curta legível;
-- data/hora;
-- metadados mínimos estruturados quando necessário.
+## 6.3 Migração e recuperação
 
-Evitar copiar dados financeiros inteiros para o histórico.
+O modelo foi integrado pela migration `core_sistema.0002_eventosistema`.
+Backups anteriores sem essa migration permanecem legados e incompatíveis;
+não há auto-migração ou conversão de backups antigos.
 
-## 6.5 Critérios de aceite
+## 6.4 Precisão do contrato
 
-- evento não altera a transação principal;
-- evento de operação bem-sucedida é criado dentro da atomicidade adequada;
-- rollback do negócio não deixa histórico falso;
-- histórico é somente leitura no fluxo operacional normal;
-- não registra secrets, chave PIX completa em logs desnecessários ou conteúdo sensível sem necessidade.
+O histórico integrado cobre as ações V1 definidas acima. Novas ações,
+incluindo fechamento mensal, somente entram após contrato próprio e decisão
+Founder quando aplicável.
 
 ---
 
@@ -826,13 +831,13 @@ Tela “Hoje” + integração visual dos módulos já estabilizados.
 
 # 19. Próxima ação recomendada
 
-1. abrir discovery contratual **read-only** do histórico de ações importantes;
-2. definir o escopo V1 e os eventos mínimos sem inventar schema final;
-3. implementar e auditar o histórico antes das próximas frentes mutáveis;
+1. obter as decisões Founder do Fechamento Mensal / Semáforo;
+2. fechar o contrato V1 do fechamento sem inferir respostas;
+3. implementar e auditar o fechamento somente após as decisões explícitas;
 4. seguir a sequência deste documento.
 
-O histórico entra agora porque as próximas capacidades já devem nascer
-registrando eventos importantes, evitando retrofit.
+O histórico de ações importantes já está integrado e deve ser usado pelas
+próximas frentes quando novos eventos forem contratados.
 
 ---
 
@@ -842,8 +847,8 @@ registrando eventos importantes, evitando retrofit.
 |---|---|
 | Idempotência pagamento funcionário | INTEGRADA |
 | Restauração de backup | INTEGRADA / CLOSED_INTEGRATED |
-| Histórico de ações | PLANEJADA — NEXT |
-| Fechamento mensal | PENDENTE — requisito original + decisões de produto |
+| Histórico de ações | INTEGRADA / CLOSED_INTEGRATED |
+| Fechamento mensal | PLANEJADA — NEXT, decisões Founder pendentes |
 | Central de cobrança | PLANEJADA |
 | Lucro por projeto | PLANEJADA — há decisão futura sobre mão de obra/projeto |
 | Cliente 360° | PLANEJADA |
