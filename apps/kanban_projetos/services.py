@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.clientes_agenda.models import AgendaContato
+from apps.core_sistema.services import registrar_evento
 from apps.financeiro.models import LancamentoFinanceiro
 from apps.financeiro.services import sincronizar_saldo_projeto
 from .models import ProjetoKanban
@@ -133,6 +134,13 @@ def aprovar_orcamento_service(
                 status='PENDENTE',
             )
 
+    registrar_evento(
+        tipo='ORCAMENTO_APROVADO',
+        dominio='KANBAN',
+        entidade_tipo='ProjetoKanban',
+        entidade_id=projeto.pk,
+    )
+
     return projeto
 
 
@@ -181,6 +189,7 @@ def arquivar_orcamento_service(
             )
 
     projeto = ProjetoKanban.objects.select_for_update().get(id=projeto_id)
+    etapa_anterior = projeto.etapa
     projeto.etapa = '9_ARQUIVADO'
     projeto.motivo_arquivamento = motivo_arquivamento
     projeto.observacao_arquivamento = observacao or ''
@@ -196,6 +205,15 @@ def arquivar_orcamento_service(
             data_agendada=data_retorno,
             realizado=False,
             feedback_cliente=f"Lembrete de retorno para orçamento arquivado: {projeto.titulo_servico}",
+        )
+
+    if etapa_anterior != '9_ARQUIVADO':
+        registrar_evento(
+            tipo='ORCAMENTO_ARQUIVADO',
+            dominio='KANBAN',
+            entidade_tipo='ProjetoKanban',
+            entidade_id=projeto.pk,
+            metadata={'motivo_codigo': motivo_arquivamento},
         )
 
     return projeto
@@ -225,6 +243,13 @@ def reativar_orcamento_service(
     projeto.etapa = nova_etapa
     projeto.motivo_arquivamento = ''
     projeto.save()
+    if nova_etapa != '9_ARQUIVADO':
+        registrar_evento(
+            tipo='ORCAMENTO_REATIVADO',
+            dominio='KANBAN',
+            entidade_tipo='ProjetoKanban',
+            entidade_id=projeto.pk,
+        )
     return projeto
 
 
@@ -286,5 +311,12 @@ def finalizar_projeto_service(
             data_agendada=hoje + timedelta(days=30),
             realizado=False,
         )
+
+    registrar_evento(
+        tipo='PROJETO_FINALIZADO',
+        dominio='KANBAN',
+        entidade_tipo='ProjetoKanban',
+        entidade_id=projeto.pk,
+    )
 
     return projeto

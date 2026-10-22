@@ -5,6 +5,7 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
+from apps.core_sistema.services import registrar_evento
 from .models import LancamentoFinanceiro
 
 
@@ -36,6 +37,13 @@ def registrar_pagamento_service(
     lancamento.data_pagamento = timezone.localdate()
     lancamento.save(update_fields=['status', 'data_pagamento', 'forma_pagamento'])
     sincronizar_saldo_projeto(lancamento.projeto_id)
+    registrar_evento(
+        tipo='LANCAMENTO_QUITADO',
+        dominio='FINANCEIRO',
+        entidade_tipo='LancamentoFinanceiro',
+        entidade_id=lancamento.pk,
+        metadata={'valor': lancamento.valor},
+    )
     return lancamento
 
 

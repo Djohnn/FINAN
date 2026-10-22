@@ -1,6 +1,35 @@
 from django.db import models
 
 
+class TipoEventoSistema(models.TextChoices):
+    ORCAMENTO_APROVADO = 'ORCAMENTO_APROVADO', 'Orçamento aprovado'
+    ORCAMENTO_ARQUIVADO = 'ORCAMENTO_ARQUIVADO', 'Orçamento arquivado'
+    ORCAMENTO_REATIVADO = 'ORCAMENTO_REATIVADO', 'Orçamento reativado'
+    PROJETO_FINALIZADO = 'PROJETO_FINALIZADO', 'Projeto finalizado'
+    PAGAMENTO_FUNCIONARIO_CRIADO = (
+        'PAGAMENTO_FUNCIONARIO_CRIADO',
+        'Pagamento de funcionário criado',
+    )
+    LANCAMENTO_QUITADO = 'LANCAMENTO_QUITADO', 'Lançamento quitado'
+    CONTATO_CONCLUIDO = 'CONTATO_CONCLUIDO', 'Contato concluído'
+    BACKUP_CONCLUIDO = 'BACKUP_CONCLUIDO', 'Backup concluído'
+    BACKUP_FALHOU = 'BACKUP_FALHOU', 'Backup falhou'
+    RESTAURACAO_CONCLUIDA = 'RESTAURACAO_CONCLUIDA', 'Restauração concluída'
+    RESTAURACAO_FALHOU_ROLLBACK_OK = (
+        'RESTAURACAO_FALHOU_ROLLBACK_OK',
+        'Restauração falhou; rollback validado',
+    )
+
+
+class DominioEventoSistema(models.TextChoices):
+    KANBAN = 'KANBAN', 'Kanban'
+    EQUIPE = 'EQUIPE', 'Equipe'
+    FINANCEIRO = 'FINANCEIRO', 'Financeiro'
+    AGENDA = 'AGENDA', 'Agenda'
+    BACKUP = 'BACKUP', 'Backup'
+    RESTAURACAO = 'RESTAURACAO', 'Restauração'
+
+
 class ConfiguracaoSistema(models.Model):
     """
     Configuração global do sistema em padrão Singleton.
@@ -59,3 +88,47 @@ class ConfiguracaoSistema(models.Model):
             }
         )
         return obj
+
+
+class EventoSistema(models.Model):
+    tipo = models.CharField(
+        max_length=50,
+        choices=TipoEventoSistema.choices,
+    )
+    dominio = models.CharField(
+        max_length=15,
+        choices=DominioEventoSistema.choices,
+    )
+    entidade_tipo = models.CharField(
+        max_length=60,
+        null=True,
+        blank=True,
+    )
+    entidade_id = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+    )
+    descricao = models.CharField(max_length=255)
+    metadata = models.JSONField(default=dict, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'Evento do Sistema'
+        verbose_name_plural = 'Eventos do Sistema'
+        indexes = [
+            models.Index(
+                fields=[
+                    'dominio',
+                    'entidade_tipo',
+                    'entidade_id',
+                    '-criado_em',
+                    '-id',
+                ],
+                name='evento_ent_hist_idx',
+            ),
+            models.Index(
+                fields=['tipo', '-criado_em', '-id'],
+                name='evento_tipo_data_idx',
+            ),
+        ]

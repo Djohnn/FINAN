@@ -6,16 +6,160 @@ import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as dt_timezone
+from decimal import Decimal
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 from django.apps import apps
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import connections, transaction
 from django.db.migrations.loader import MigrationLoader
 from django.utils import timezone
 
-from .models import ConfiguracaoSistema
+from .models import (
+    ConfiguracaoSistema,
+    DominioEventoSistema,
+    EventoSistema,
+    TipoEventoSistema,
+)
+
+
+_EVENT_CONTRACTS = {
+    'ORCAMENTO_APROVADO': ('KANBAN', 'ProjetoKanban'),
+    'ORCAMENTO_ARQUIVADO': ('KANBAN', 'ProjetoKanban'),
+    'ORCAMENTO_REATIVADO': ('KANBAN', 'ProjetoKanban'),
+    'PROJETO_FINALIZADO': ('KANBAN', 'ProjetoKanban'),
+    'PAGAMENTO_FUNCIONARIO_CRIADO': ('EQUIPE', 'Funcionario'),
+    'LANCAMENTO_QUITADO': ('FINANCEIRO', 'LancamentoFinanceiro'),
+    'CONTATO_CONCLUIDO': ('AGENDA', 'AgendaContato'),
+    'BACKUP_CONCLUIDO': ('BACKUP', None),
+    'BACKUP_FALHOU': ('BACKUP', None),
+    'RESTAURACAO_CONCLUIDA': ('RESTAURACAO', None),
+    'RESTAURACAO_FALHOU_ROLLBACK_OK': ('RESTAURACAO', None),
+}
+
+_EVENT_DESCRIPTIONS = {
+    'ORCAMENTO_APROVADO': 'Orçamento aprovado (ProjetoKanban #{id})',
+    'ORCAMENTO_ARQUIVADO': 'Orçamento arquivado (ProjetoKanban #{id})',
+    'ORCAMENTO_REATIVADO': 'Orçamento reativado (ProjetoKanban #{id})',
+    'PROJETO_FINALIZADO': 'Projeto finalizado (ProjetoKanban #{id})',
+    'PAGAMENTO_FUNCIONARIO_CRIADO': 'Pagamento de funcionário criado (Funcionario #{id})',
+    'LANCAMENTO_QUITADO': 'Lançamento financeiro quitado (LancamentoFinanceiro #{id})',
+    'CONTATO_CONCLUIDO': 'Contato concluído (AgendaContato #{id})',
+    'BACKUP_CONCLUIDO': 'Backup concluído',
+    'BACKUP_FALHOU': 'Falha no backup',
+    'RESTAURACAO_CONCLUIDA': 'Restauração concluída',
+    'RESTAURACAO_FALHOU_ROLLBACK_OK': 'Restauração falhou; rollback validado',
+}
+
+_CANONICAL_ENTITY_ID_RE = re.compile(r'^[1-9][0-9]*$')
+
+
+def _canonical_entity_id(value: Any) -> str:
+    if isinstance(value, bool):
+        raise ValidationError('entidade_id deve ser um identificador decimal.')
+    if isinstance(value, int):
+        if value <= 0:
+            raise ValidationError('entidade_id deve ser um identificador decimal.')
+        return str(value)
+    if not isinstance(value, str) or _CANONICAL_ENTITY_ID_RE.fullmatch(value) is None:
+        raise ValidationError('entidade_id deve ser um identificador decimal canônico.')
+    return value
+
+
+def _canonical_money(value: Any) -> str:
+    if isinstance(value, (bool, float)):
+        raise ValidationError('valores monetários não podem ser bool ou float.')
+    from apps.financeiro.models import LancamentoFinanceiro
+
+    try:
+        decimal_value = LancamentoFinanceiro.validar_valor_monetario(value)
+    except ValidationError:
+        raise
+    return format(decimal_value.quantize(Decimal('0.01')), 'f')
+
+
+def _normalize_metadata(tipo: str, metadata: dict[str, Any] | None) -> dict[str, str]:
+    if metadata is None:
+        metadata = {}
+    if not isinstance(metadata, dict):
+        raise ValidationError('metadata deve ser um objeto JSON.')
+    metadata = dict(metadata)
+    allowed = {
+        'ORCAMENTO_APROVADO': set(),
+        'ORCAMENTO_ARQUIVADO': {'motivo_codigo'},
+        'ORCAMENTO_REATIVADO': set(),
+        'PROJETO_FINALIZADO': set(),
+        'PAGAMENTO_FUNCIONARIO_CRIADO': {'lancamento_id', 'valor'},
+        'LANCAMENTO_QUITADO': {'valor'},
+        'CONTATO_CONCLUIDO': set(),
+        'BACKUP_CONCLUIDO': set(),
+        'BACKUP_FALHOU': {'categoria'},
+        'RESTAURACAO_CONCLUIDA': set(),
+        'RESTAURACAO_FALHOU_ROLLBACK_OK': set(),
+    }[tipo]
+    if set(metadata) != allowed:
+        raise ValidationError('metadata contém chaves inválidas ou ausentes.')
+    if 'motivo_codigo' in metadata:
+        value = metadata['motivo_codigo']
+        if not isinstance(value, str) or not value.strip():
+            raise ValidationError('motivo_codigo deve ser texto não vazio.')
+        metadata['motivo_codigo'] = value.strip()
+    if 'lancamento_id' in metadata:
+        metadata['lancamento_id'] = _canonical_entity_id(metadata['lancamento_id'])
+    if 'valor' in metadata:
+        metadata['valor'] = _canonical_money(metadata['valor'])
+    if 'categoria' in metadata:
+        categorias = {
+            'DESTINO_NAO_CONFIGURADO',
+            'DESTINO_INACESSIVEL',
+            'ERRO_SQLITE_BACKUP',
+        }
+        value = metadata['categoria']
+        if not isinstance(value, str) or value not in categorias:
+            raise ValidationError('categoria de falha do backup inválida.')
+    return metadata
+
+
+def registrar_evento(
+    *,
+    tipo,
+    dominio,
+    entidade_tipo=None,
+    entidade_id=None,
+    metadata=None,
+) -> EventoSistema:
+    if not isinstance(tipo, str) or not isinstance(dominio, str):
+        raise ValidationError('tipo e dominio de evento devem ser texto.')
+    valid_types = {value for value, _label in TipoEventoSistema.choices}
+    valid_domains = {value for value, _label in DominioEventoSistema.choices}
+    if tipo not in valid_types or dominio not in valid_domains:
+        raise ValidationError('tipo ou dominio de evento inválido.')
+    expected_domain, expected_entity_type = _EVENT_CONTRACTS[tipo]
+    if dominio != expected_domain:
+        raise ValidationError('A combinação de tipo e domínio do evento é inválida.')
+    if expected_entity_type is None:
+        if entidade_tipo is not None or entidade_id is not None:
+            raise ValidationError('Eventos de sistema não aceitam entidade.')
+        normalized_entity_id = None
+    else:
+        if entidade_tipo != expected_entity_type:
+            raise ValidationError('O tipo de entidade do evento é inválido.')
+        if entidade_id is None:
+            raise ValidationError('A entidade do evento é obrigatória.')
+        normalized_entity_id = _canonical_entity_id(entidade_id)
+    normalized_metadata = _normalize_metadata(tipo, metadata)
+    descricao_template = _EVENT_DESCRIPTIONS[tipo]
+    descricao = descricao_template.format(id=normalized_entity_id) if normalized_entity_id else descricao_template
+    return EventoSistema.objects.create(
+        tipo=tipo,
+        dominio=dominio,
+        entidade_tipo=expected_entity_type,
+        entidade_id=normalized_entity_id,
+        descricao=descricao,
+        metadata=normalized_metadata,
+    )
 
 
 def backup_realizado_hoje(config, hoje=None) -> bool:
@@ -82,12 +226,53 @@ def _registrar_falha(config, mensagem: str) -> tuple[bool, str]:
     return False, mensagem
 
 
+def _is_regular_source_file(source_path: Path) -> bool:
+    try:
+        return (
+            source_path.exists()
+            and source_path.is_file()
+            and not _is_symlink_or_reparse(source_path)
+        )
+    except OSError:
+        return False
+
+
+def _attempt_maintenance_event(*, tipo: str, metadata=None) -> bool:
+    try:
+        kwargs = {
+            'tipo': tipo,
+            'dominio': 'BACKUP' if tipo.startswith('BACKUP_') else 'RESTAURACAO',
+        }
+        if metadata is not None:
+            kwargs['metadata'] = metadata
+        registrar_evento(**kwargs)
+    except Exception:
+        return False
+    return True
+
+
+def _backup_failure(config, mensagem: str, categoria: str) -> tuple[bool, str]:
+    _registrar_falha(config, mensagem)
+    history_ok = _attempt_maintenance_event(
+        tipo='BACKUP_FALHOU',
+        metadata={'categoria': categoria},
+    )
+    if not history_ok:
+        mensagem += (
+            ' Aviso: a falha do backup foi registrada, mas o histórico operacional '
+            'não pôde ser registrado.'
+        )
+    return False, mensagem
+
+
 def executar_backup_pendrive() -> tuple[bool, str]:
     """Cria um backup SQLite íntegro e aplica retenção só aos seus arquivos."""
     source_name = settings.DATABASES.get('default', {}).get('NAME')
     if not source_name:
         return False, 'Arquivo SQLite de origem não configurado.'
     source_path = Path(source_name)
+    if not _is_regular_source_file(source_path):
+        return False, 'Arquivo SQLite de origem não encontrado.'
 
     with _backup_lock(source_path) as acquired:
         if not acquired:
@@ -96,28 +281,36 @@ def executar_backup_pendrive() -> tuple[bool, str]:
                 'Verifique manualmente o processo registrado antes de qualquer recuperação.'
             )
 
+        if not _is_regular_source_file(source_path):
+            return False, 'Arquivo SQLite de origem não encontrado após a aquisição do lock.'
+
         config = ConfiguracaoSistema.get_solo()
         pasta_destino = (config.caminho_backup_pendrive or '').strip()
         if not pasta_destino:
-            return _registrar_falha(config, 'Destino de backup não configurado.')
-        if not source_path.exists():
-            return _registrar_falha(
+            return _backup_failure(
                 config,
-                f'Arquivo SQLite de origem não encontrado: {source_path}',
+                'Destino de backup não configurado.',
+                'DESTINO_NAO_CONFIGURADO',
             )
 
         destination = Path(pasta_destino)
         try:
             destination.mkdir(parents=True, exist_ok=True)
+            if not destination.is_dir():
+                raise OSError('o destino não é uma pasta')
         except OSError as exc:
-            return _registrar_falha(config, f'Não foi possível acessar o destino de backup: {exc}')
+            return _backup_failure(
+                config,
+                f'Não foi possível acessar o destino de backup: {exc}',
+                'DESTINO_INACESSIVEL',
+            )
 
         date_text = timezone.localdate().strftime('%Y-%m-%d')
         final_path = destination / f'backup_marcenaria_{date_text}.sqlite3'
         temp_path = destination / f'.{final_path.name}.{uuid.uuid4().hex}.tmp'
         source_conn = destination_conn = None
         try:
-            source_conn = sqlite3.connect(str(source_path))
+            source_conn = sqlite3.connect(_sqlite_read_only_uri(source_path), uri=True)
             destination_conn = sqlite3.connect(str(temp_path))
             with destination_conn:
                 source_conn.backup(destination_conn)
@@ -135,34 +328,45 @@ def executar_backup_pendrive() -> tuple[bool, str]:
                 source_conn.close()
             try:
                 temp_path.unlink()
-            except FileNotFoundError:
+            except OSError:
                 pass
-            return _registrar_falha(config, f'Erro ao realizar backup do SQLite: {exc}')
+            return _backup_failure(
+                config,
+                f'Erro ao realizar backup do SQLite: {exc}',
+                'ERRO_SQLITE_BACKUP',
+            )
 
-    limite_data = timezone.localdate() - timedelta(days=config.dias_retencao_backup or 30)
-    backup_pattern = re.compile(r'^backup_marcenaria_(\d{4}-\d{2}-\d{2})\.sqlite3$')
-    try:
-        for item in destination.iterdir():
-            match = backup_pattern.fullmatch(item.name)
-            if not match or not item.is_file():
-                continue
-            try:
-                data_arquivo = datetime.strptime(match.group(1), '%Y-%m-%d').date()
-            except ValueError:
-                continue
-            if data_arquivo < limite_data:
-                item.unlink()
-    except OSError:
-        pass
+        limite_data = timezone.localdate() - timedelta(days=config.dias_retencao_backup or 30)
+        backup_pattern = re.compile(r'^backup_marcenaria_(\d{4}-\d{2}-\d{2})\.sqlite3$')
+        try:
+            for item in destination.iterdir():
+                match = backup_pattern.fullmatch(item.name)
+                if not match or not item.is_file():
+                    continue
+                try:
+                    data_arquivo = datetime.strptime(match.group(1), '%Y-%m-%d').date()
+                except ValueError:
+                    continue
+                if data_arquivo < limite_data:
+                    item.unlink()
+        except OSError:
+            pass
 
-    with transaction.atomic():
-        config.ultimo_backup_em = timezone.now()
-        config.ultimo_backup_sucesso = True
-        config.mensagem_erro_backup = ''
-        config.save(update_fields=[
-            'ultimo_backup_em', 'ultimo_backup_sucesso', 'mensagem_erro_backup',
-        ])
-    return True, f"Backup realizado com sucesso em '{final_path}'!"
+        with transaction.atomic():
+            config.ultimo_backup_em = timezone.now()
+            config.ultimo_backup_sucesso = True
+            config.mensagem_erro_backup = ''
+            config.save(update_fields=[
+                'ultimo_backup_em', 'ultimo_backup_sucesso', 'mensagem_erro_backup',
+            ])
+
+        message = f"Backup realizado com sucesso em '{final_path}'!"
+        if not _attempt_maintenance_event(tipo='BACKUP_CONCLUIDO'):
+            message += (
+                ' Aviso: o backup foi concluído, mas o histórico operacional '
+                'não pôde ser registrado.'
+            )
+        return True, message
 
 
 RESTORE_SUCCESS = 'SUCCESS'
@@ -212,11 +416,15 @@ class _CandidateValidation:
 
 _REQUIRED_MODELS = (
     ('core_sistema', 'ConfiguracaoSistema'),
+    ('core_sistema', 'EventoSistema'),
     ('clientes_agenda', 'Cliente'),
     ('clientes_agenda', 'AgendaContato'),
     ('kanban_projetos', 'ProjetoKanban'),
     ('equipe', 'Funcionario'),
     ('financeiro', 'LancamentoFinanceiro'),
+)
+_PRE_HISTORY_REQUIRED_MODELS = tuple(
+    item for item in _REQUIRED_MODELS if item != ('core_sistema', 'EventoSistema')
 )
 
 
@@ -276,16 +484,48 @@ def _has_sqlite_header(path: Path) -> bool:
         return False
 
 
-def _required_schema() -> dict[str, set[str]]:
+def _schema_for_models(
+    model_specs: tuple[tuple[str, str], ...],
+) -> dict[str, set[str]]:
     required = {
         'django_migrations': {'id', 'app', 'name', 'applied'},
     }
-    for app_label, model_name in _REQUIRED_MODELS:
+    for app_label, model_name in model_specs:
         model = apps.get_model(app_label, model_name)
         required[model._meta.db_table] = {
             field.column for field in model._meta.local_concrete_fields
         }
     return required
+
+
+def _required_schema() -> dict[str, set[str]]:
+    return _schema_for_models(_REQUIRED_MODELS)
+
+
+def _pre_history_required_schema() -> dict[str, set[str]]:
+    return _schema_for_models(_PRE_HISTORY_REQUIRED_MODELS)
+
+
+def _missing_required_schema(
+    connection: sqlite3.Connection,
+    required: dict[str, set[str]],
+) -> str | None:
+    table_rows = connection.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'",
+    ).fetchall()
+    tables = {row[0] for row in table_rows}
+    missing_tables = sorted(set(required) - tables)
+    if missing_tables:
+        return f'Tabelas FinanPE ausentes: {", ".join(missing_tables)}.'
+    for table, columns in required.items():
+        table_info = connection.execute(
+            f'PRAGMA table_info({_quote_identifier(table)})',
+        ).fetchall()
+        available_columns = {row[1] for row in table_info}
+        missing_columns = sorted(columns - available_columns)
+        if missing_columns:
+            return f'Colunas ausentes em {table}: {", ".join(missing_columns)}.'
+    return None
 
 
 def _current_migration_set() -> frozenset[tuple[str, str]]:
@@ -350,36 +590,22 @@ def _validate_candidate(
         connection = sqlite3.connect(_sqlite_read_only_uri(candidate_path), uri=True)
         try:
             integrity = connection.execute('PRAGMA integrity_check').fetchone()
-        except sqlite3.DatabaseError as exc:
+        except sqlite3.DatabaseError:
             category = 'CORRUPT_SQLITE' if _has_sqlite_header(candidate_path) else 'NOT_SQLITE'
             return _validation(False, category, 'A integridade do SQLite não pôde ser validada.')
         if not integrity or integrity[0] != 'ok':
             return _validation(False, 'CORRUPT_SQLITE', 'PRAGMA integrity_check não retornou ok.')
 
-        required = _required_schema()
-        table_rows = connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'",
-        ).fetchall()
-        tables = {row[0] for row in table_rows}
-        missing_tables = sorted(set(required) - tables)
-        if missing_tables:
+        basic_schema_error = _missing_required_schema(
+            connection,
+            _pre_history_required_schema(),
+        )
+        if basic_schema_error:
             return _validation(
                 False,
                 'NOT_FINANPE_DATABASE',
-                f'Tabelas FinanPE ausentes: {", ".join(missing_tables)}.',
+                basic_schema_error,
             )
-        for table, columns in required.items():
-            table_info = connection.execute(
-                f'PRAGMA table_info({_quote_identifier(table)})',
-            ).fetchall()
-            available_columns = {row[1] for row in table_info}
-            missing_columns = sorted(columns - available_columns)
-            if missing_columns:
-                return _validation(
-                    False,
-                    'NOT_FINANPE_DATABASE',
-                    f'Colunas ausentes em {table}: {", ".join(missing_columns)}.',
-                )
 
         applied = frozenset(
             (row[0], row[1])
@@ -390,6 +616,16 @@ def _validate_candidate(
                 False,
                 'INCOMPATIBLE_SCHEMA',
                 'O conjunto de migrations não é exatamente compatível com o executável atual.',
+            )
+        current_schema_error = _missing_required_schema(
+            connection,
+            _required_schema(),
+        )
+        if current_schema_error:
+            return _validation(
+                False,
+                'NOT_FINANPE_DATABASE',
+                current_schema_error,
             )
     except sqlite3.DatabaseError:
         category = 'CORRUPT_SQLITE' if _has_sqlite_header(candidate_path) else 'NOT_SQLITE'
@@ -727,10 +963,16 @@ def restore_backup(
             reject_live=False,
         )
         if post_validation.valid:
+            message = 'Restauração concluída e o banco substituído foi validado.'
+            if not _attempt_maintenance_event(tipo='RESTAURACAO_CONCLUIDA'):
+                message += (
+                    ' Aviso: a restauração foi concluída e validada, mas o histórico '
+                    'operacional não pôde ser registrado.'
+                )
             return _result(
                 success=True,
                 category=RESTORE_SUCCESS,
-                message='Restauração concluída e o banco substituído foi validado.',
+                message=message,
                 source_path=source,
                 live_path=live,
                 dry_run=False,
@@ -804,13 +1046,21 @@ def restore_backup(
                 rollback_performed=True,
                 rollback_success=False,
             )
+        message = (
+            'A validação pós-restauração falhou; o banco anterior foi restaurado e validado. '
+            'A operação solicitada não foi considerada bem-sucedida.'
+        )
+        if not _attempt_maintenance_event(
+            tipo='RESTAURACAO_FALHOU_ROLLBACK_OK',
+        ):
+            message += (
+                ' Aviso: o rollback foi concluído e validado, mas o histórico operacional '
+                'não pôde ser registrado.'
+            )
         return _result(
             success=False,
             category='POST_VALIDATION_FAILED_ROLLBACK_OK',
-            message=(
-                'A validação pós-restauração falhou; o banco anterior foi restaurado e validado. '
-                'A operação solicitada não foi considerada bem-sucedida.'
-            ),
+            message=message,
             source_path=source,
             live_path=live,
             dry_run=False,

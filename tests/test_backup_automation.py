@@ -1,7 +1,10 @@
 from datetime import timedelta
+from contextlib import closing
 from io import StringIO
 from pathlib import Path
 import re
+import sqlite3
+import tempfile
 from unittest.mock import patch
 
 from django.core.management import call_command
@@ -10,7 +13,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from apps.core_sistema.context_processors import alertas_globais
-from apps.core_sistema.models import ConfiguracaoSistema
+from apps.core_sistema.models import ConfiguracaoSistema, EventoSistema
 from apps.core_sistema import services
 
 
@@ -167,3 +170,183 @@ class BackupAutomationTests(TestCase):
 
         self.assertEqual(logon_types, ['Interactive'])
         self.assertNotIn('-LogonType InteractiveToken', installer)
+
+
+class ImportantHistoryBackupTests(TestCase):
+    def _write_source(self, folder):
+        source = folder / 'live.sqlite3'
+        with closing(sqlite3.connect(source)) as database:
+            database.execute('CREATE TABLE marker (id INTEGER PRIMARY KEY)')
+            database.commit()
+        return source
+
+    def _configure(self, source, destination):
+        config = ConfiguracaoSistema.get_solo()
+        config.caminho_backup_pendrive = str(destination)
+        config.ultimo_backup_sucesso = False
+        config.mensagem_erro_backup = ''
+        config.save(update_fields=[
+            'caminho_backup_pendrive',
+            'ultimo_backup_sucesso',
+            'mensagem_erro_backup',
+        ])
+        return patch.object(
+            services.settings,
+            'DATABASES',
+            {'default': {'NAME': str(source)}},
+        )
+
+    def test_missing_source_is_rejected_before_lock_orm_and_event(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as raw_folder:
+            folder = Path(raw_folder)
+            source = folder / 'missing.sqlite3'
+            destination = folder / 'destination'
+            with self._configure(source, destination):
+                with patch.object(services, '_maintenance_lock') as lock:
+                    with patch.object(services.ConfiguracaoSistema, 'get_solo') as get_solo:
+                        with patch.object(services, 'registrar_evento') as registrar:
+                            result = services.executar_backup_pendrive()
+            self.assertFalse(result[0])
+            lock.assert_not_called()
+            get_solo.assert_not_called()
+            registrar.assert_not_called()
+            self.assertFalse(source.exists())
+            self.assertFalse(destination.exists())
+
+    def test_source_missing_under_lock_recheck_has_zero_orm_and_event(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as raw_folder:
+            folder = Path(raw_folder)
+            source = self._write_source(folder)
+            destination = folder / 'destination'
+            with self._configure(source, destination):
+                with patch.object(
+                    services,
+                    '_is_regular_source_file',
+                    side_effect=[True, False],
+                ):
+                    with patch.object(services.ConfiguracaoSistema, 'get_solo') as get_solo:
+                        with patch.object(services, 'registrar_evento') as registrar:
+                            result = services.executar_backup_pendrive()
+            self.assertFalse(result[0])
+            get_solo.assert_not_called()
+            registrar.assert_not_called()
+            self.assertFalse(destination.exists())
+
+    def test_read_only_source_open_does_not_recreate_vanished_file(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as raw_folder:
+            source = Path(raw_folder) / 'vanished.sqlite3'
+            source.touch()
+            source.unlink()
+            with self.assertRaises(sqlite3.OperationalError):
+                sqlite3.connect(services._sqlite_read_only_uri(source), uri=True)
+            self.assertFalse(source.exists())
+
+    def test_successful_backup_records_history_while_lock_is_held(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as raw_folder:
+            folder = Path(raw_folder)
+            source = self._write_source(folder)
+            destination = folder / 'destination'
+            with self._configure(source, destination):
+                lock_path = source.with_name(source.name + '.backup.lock')
+                original_registrar = services.registrar_evento
+
+                def record_event_while_locked(**kwargs):
+                    self.assertTrue(lock_path.exists())
+                    return original_registrar(**kwargs)
+
+                with patch.object(
+                    services,
+                    'registrar_evento',
+                    side_effect=record_event_while_locked,
+                ) as registrar:
+                    result = services.executar_backup_pendrive()
+            self.assertTrue(result[0], result[1])
+            registrar.assert_called_once_with(
+                tipo='BACKUP_CONCLUIDO',
+                dominio='BACKUP',
+            )
+            backup = destination / f"backup_marcenaria_{timezone.localdate():%Y-%m-%d}.sqlite3"
+            self.assertTrue(backup.exists())
+            self.assertFalse(lock_path.exists())
+            self.assertEqual(EventoSistema.objects.filter(tipo='BACKUP_CONCLUIDO').count(), 1)
+
+    def test_destination_not_configured_records_stable_failure_event(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as raw_folder:
+            folder = Path(raw_folder)
+            source = self._write_source(folder)
+            with self._configure(source, folder / 'unused'):
+                config = ConfiguracaoSistema.get_solo()
+                config.caminho_backup_pendrive = ''
+                config.save(update_fields=['caminho_backup_pendrive'])
+                result = services.executar_backup_pendrive()
+            self.assertFalse(result[0])
+            evento = EventoSistema.objects.get(tipo='BACKUP_FALHOU')
+            self.assertEqual(evento.metadata, {'categoria': 'DESTINO_NAO_CONFIGURADO'})
+
+    def test_inaccessible_destination_records_failure_event(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as raw_folder:
+            folder = Path(raw_folder)
+            source = self._write_source(folder)
+            destination = folder / 'destination-file'
+            destination.write_text('not a directory', encoding='utf-8')
+            with self._configure(source, destination):
+                result = services.executar_backup_pendrive()
+            self.assertFalse(result[0])
+            evento = EventoSistema.objects.get(tipo='BACKUP_FALHOU')
+            self.assertEqual(evento.metadata, {'categoria': 'DESTINO_INACESSIVEL'})
+
+    def test_sqlite_failure_records_failure_event(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as raw_folder:
+            folder = Path(raw_folder)
+            source = self._write_source(folder)
+            with self._configure(source, folder / 'destination'):
+                with patch.object(
+                    services.sqlite3,
+                    'connect',
+                    side_effect=sqlite3.DatabaseError('simulated'),
+                ):
+                    result = services.executar_backup_pendrive()
+            self.assertFalse(result[0])
+            evento = EventoSistema.objects.get(tipo='BACKUP_FALHOU')
+            self.assertEqual(evento.metadata, {'categoria': 'ERRO_SQLITE_BACKUP'})
+
+    def test_success_history_failure_keeps_backup_and_status(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as raw_folder:
+            folder = Path(raw_folder)
+            source = self._write_source(folder)
+            destination = folder / 'destination'
+            with self._configure(source, destination):
+                with patch.object(
+                    services,
+                    'registrar_evento',
+                    side_effect=RuntimeError('history failure'),
+                ):
+                    result = services.executar_backup_pendrive()
+            self.assertTrue(result[0])
+            self.assertIn(
+                'Aviso: o backup foi concluído, mas o histórico operacional não pôde ser registrado.',
+                result[1],
+            )
+            config = ConfiguracaoSistema.objects.get(pk=1)
+            self.assertTrue(config.ultimo_backup_sucesso)
+            self.assertTrue(list(destination.glob('backup_marcenaria_*.sqlite3')))
+
+    def test_failure_history_failure_keeps_failure_status_and_warning(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as raw_folder:
+            folder = Path(raw_folder)
+            source = self._write_source(folder)
+            destination = folder / 'destination-file'
+            destination.write_text('not a directory', encoding='utf-8')
+            with self._configure(source, destination):
+                with patch.object(
+                    services,
+                    'registrar_evento',
+                    side_effect=RuntimeError('history failure'),
+                ):
+                    result = services.executar_backup_pendrive()
+            self.assertFalse(result[0])
+            self.assertIn(
+                'Aviso: a falha do backup foi registrada, mas o histórico operacional não pôde ser registrado.',
+                result[1],
+            )
+            self.assertFalse(ConfiguracaoSistema.objects.get(pk=1).ultimo_backup_sucesso)

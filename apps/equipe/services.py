@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+from apps.core_sistema.services import registrar_evento
 from apps.financeiro.models import LancamentoFinanceiro
 from .models import Funcionario
 
@@ -143,5 +144,16 @@ def lancar_pagamento_funcionario_service(
         status=status,
     )
     lancamento.foi_criado = True
+
+    registrar_evento(
+        tipo='PAGAMENTO_FUNCIONARIO_CRIADO',
+        dominio='EQUIPE',
+        entidade_tipo='Funcionario',
+        entidade_id=funcionario.pk,
+        metadata={
+            'lancamento_id': lancamento.pk,
+            'valor': lancamento.valor,
+        },
+    )
 
     return lancamento

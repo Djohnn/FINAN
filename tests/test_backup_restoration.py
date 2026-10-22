@@ -1,5 +1,4 @@
 import hashlib
-import re
 import shutil
 import sqlite3
 import tempfile
@@ -13,7 +12,7 @@ from django.db import connection
 from django.test import SimpleTestCase, TestCase
 
 from apps.core_sistema import services
-from apps.core_sistema.models import ConfiguracaoSistema
+from apps.core_sistema.models import ConfiguracaoSistema, EventoSistema
 
 
 class RestoreServiceTests(TestCase):
@@ -561,6 +560,161 @@ class RestoreServiceTests(TestCase):
         self.assertTrue(result.success, result.message)
         self.assertIn(' ', result.live_db_path)
         self.assertIn(' ', result.source_path)
+
+    def test_new_schema_requires_event_history_table(self):
+        self._replace_source(
+            lambda database: database.execute('DROP TABLE core_sistema_eventosistema'),
+        )
+        result = self._service(self.source)
+        self.assertFalse(result.success)
+        self.assertEqual(result.category, 'NOT_FINANPE_DATABASE')
+
+    def test_valid_pre_history_schema_is_incompatible_with_current_executable(self):
+        def make_pre_history(database):
+            database.execute('DROP TABLE core_sistema_eventosistema')
+            database.execute(
+                "DELETE FROM django_migrations "
+                "WHERE app = 'core_sistema' AND name = '0002_eventosistema'",
+            )
+
+        self._replace_source(make_pre_history)
+        result = self._service(self.source)
+        self.assertFalse(result.success)
+        self.assertEqual(result.category, 'INCOMPATIBLE_SCHEMA')
+
+    def test_current_migrations_with_event_table_missing_are_not_finanpe(self):
+        self._replace_source(
+            lambda database: database.execute('DROP TABLE core_sistema_eventosistema'),
+        )
+        result = self._service(self.source)
+        self.assertFalse(result.success)
+        self.assertEqual(result.category, 'NOT_FINANPE_DATABASE')
+
+    def test_current_migrations_with_event_column_missing_are_not_finanpe(self):
+        def remove_event_metadata(database):
+            database.execute('DROP TABLE core_sistema_eventosistema')
+            database.execute(
+                '''
+                CREATE TABLE core_sistema_eventosistema (
+                    id integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    tipo varchar(50) NOT NULL,
+                    dominio varchar(15) NOT NULL,
+                    entidade_tipo varchar(60),
+                    entidade_id varchar(64),
+                    descricao varchar(255) NOT NULL,
+                    criado_em datetime NOT NULL
+                )
+                ''',
+            )
+
+        self._replace_source(remove_event_metadata)
+        result = self._service(self.source)
+        self.assertFalse(result.success)
+        self.assertEqual(result.category, 'NOT_FINANPE_DATABASE')
+
+    def test_missing_legacy_finanpe_table_is_not_finanpe(self):
+        self._replace_source(
+            lambda database: database.execute('DROP TABLE clientes_agenda_cliente'),
+        )
+        result = self._service(self.source)
+        self.assertFalse(result.success)
+        self.assertEqual(result.category, 'NOT_FINANPE_DATABASE')
+
+    def test_current_schema_with_event_history_is_eligible(self):
+        result = self._service(self.source)
+        self.assertTrue(result.success, result.message)
+        self.assertTrue(result.dry_run)
+
+    def test_restore_dry_run_does_not_create_history_event(self):
+        result = self._service(self.source, dry_run=True)
+        self.assertTrue(result.success, result.message)
+        self.assertEqual(EventoSistema.objects.count(), 0)
+
+    def test_successful_restore_records_history(self):
+        result = self._restore()
+        self.assertTrue(result.success, result.message)
+        self.assertEqual(
+            EventoSistema.objects.filter(tipo='RESTAURACAO_CONCLUIDA').count(),
+            1,
+        )
+
+    def test_restore_history_failure_does_not_rollback_valid_restore(self):
+        before = self._digest(self.live)
+        with patch.object(
+            services,
+            'registrar_evento',
+            side_effect=RuntimeError('history failure'),
+        ):
+            result = self._restore()
+        self.assertTrue(result.success, result.message)
+        self.assertFalse(result.rollback_performed)
+        self.assertIn(
+            'Aviso: a restauração foi concluída e validada, mas o histórico operacional não pôde ser registrado.',
+            result.message,
+        )
+        self.assertEqual(self._digest(self.live), before)
+
+    def _force_post_validation_failure(self):
+        original_validate = services._validate_candidate
+        original_replace = services.os.replace
+        replaced = False
+        post_failure_pending = True
+
+        def mark_replace(source, destination):
+            nonlocal replaced
+            if '.restore-stage-' in Path(source).name and Path(destination) == self.live:
+                replaced = True
+            return original_replace(source, destination)
+
+        def fail_post(path, live, expected, *, reject_live):
+            nonlocal post_failure_pending
+            if replaced and post_failure_pending and Path(path) == self.live:
+                post_failure_pending = False
+                return services._validation(False, 'CORRUPT_SQLITE', 'post invalid')
+            return original_validate(path, live, expected, reject_live=reject_live)
+
+        return mark_replace, fail_post
+
+    def test_rollback_ok_records_failure_history(self):
+        mark_replace, fail_post = self._force_post_validation_failure()
+        with patch.object(services.os, 'replace', side_effect=mark_replace):
+            with patch.object(services, '_validate_candidate', side_effect=fail_post):
+                result = self._restore()
+        self.assertFalse(result.success)
+        self.assertEqual(result.category, 'POST_VALIDATION_FAILED_ROLLBACK_OK')
+        self.assertEqual(
+            EventoSistema.objects.filter(
+                tipo='RESTAURACAO_FALHOU_ROLLBACK_OK',
+            ).count(),
+            1,
+        )
+
+    def test_rollback_ok_history_failure_preserves_rollback_and_warns(self):
+        mark_replace, fail_post = self._force_post_validation_failure()
+        with patch.object(
+            services,
+            'registrar_evento',
+            side_effect=RuntimeError('history failure'),
+        ):
+            with patch.object(services.os, 'replace', side_effect=mark_replace):
+                with patch.object(services, '_validate_candidate', side_effect=fail_post):
+                    result = self._restore()
+        self.assertFalse(result.success)
+        self.assertEqual(result.category, 'POST_VALIDATION_FAILED_ROLLBACK_OK')
+        self.assertTrue(result.rollback_success)
+        self.assertIn(
+            'Aviso: o rollback foi concluído e validado, mas o histórico operacional não pôde ser registrado.',
+            result.message,
+        )
+
+    def test_lock_refusal_does_not_write_restore_history(self):
+        with services._maintenance_lock(self.live, 'RESTORE') as acquired:
+            self.assertTrue(acquired)
+            with patch.object(services, 'registrar_evento') as registrar:
+                result = self._restore()
+        self.assertFalse(result.success)
+        self.assertEqual(result.category, 'MAINTENANCE_LOCKED')
+        registrar.assert_not_called()
 
 
 class RestoreCommandAndScriptTests(TestCase):

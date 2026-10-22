@@ -2,6 +2,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+from apps.core_sistema.services import registrar_evento
 from .models import AgendaContato
 
 
@@ -17,6 +18,7 @@ def concluir_pos_venda_service(
     - O nível de satisfação é obrigatório.
     """
     agenda = AgendaContato.objects.select_for_update().get(id=agenda_id)
+    era_realizado = agenda.realizado
 
     texto_util = "".join((feedback_cliente or "").split())
     if len(texto_util) < 10:
@@ -43,6 +45,14 @@ def concluir_pos_venda_service(
     agenda.feedback_cliente = feedback_cliente.strip()
     agenda.nivel_satisfacao = nivel_satisfacao_normalizado
     agenda.save()
+
+    if not era_realizado:
+        registrar_evento(
+            tipo='CONTATO_CONCLUIDO',
+            dominio='AGENDA',
+            entidade_tipo='AgendaContato',
+            entidade_id=agenda.pk,
+        )
 
     return agenda
 
