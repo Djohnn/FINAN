@@ -1,10 +1,10 @@
 # FinanPE — Plano de Evolução de Produto V1+
 
 **Status do documento:** Plano de evolução de produto aprovado pelo Founder; capacidades futuras permanecem planejadas
-**Data-base:** 2026-10-22
+**Data-base:** 2026-10-23
 **Modo do produto:** local-first, Windows, SQLite, single-user, sem login na V1
-**Base canônica no momento da redação:** `f370fdac09c5ef9d58869f619fecaafff25e3774`
-**Baseline canônico no momento da redação:** 307 testes PASS
+**Base canônica no momento da redação:** `3e2ac05b3f45f2c9342473063ab457f83f0c14bc`
+**Baseline canônico no momento da redação:** 365 testes PASS
 **Documento complementar a:** `docs/PRD_CONTEXT.md`, `docs/DATABASE_SCHEMA.md`, `docs/ROADMAP_PROMPTS.md`
 
 ---
@@ -69,7 +69,7 @@ O histórico de ações, por exemplo, é prioridade média para o usuário, mas 
 | 1 | Restauração de backup / recuperação | **Crítica — concluída** | Evita perda definitiva da empresa em falha de disco/DB |
 | 2 | Histórico de ações importantes | Integrada | Evita retrofit nas próximas frentes |
 | 3 | Fechamento Mensal / Semáforo | **Integrada / CLOSED_INTEGRATED** | Fecha o núcleo financeiro e alimenta indicadores |
-| 4 | Central de contas a receber / cobrança | **Muito alta — próxima frente de descoberta/contrato** | Impacto direto em caixa e inadimplência |
+| 4 | Central de contas a receber / cobrança | **Backend integrado / frontend protótipo next** | Impacto direto em caixa e inadimplência |
 | 5 | Lucro/margem por projeto | **Muito alta** | Mostra quais serviços realmente geram resultado |
 | 6 | Visão 360° do cliente | Alta | Concentra memória comercial e operacional |
 | 7 | Despesas recorrentes | Média/Alta | Reduz esquecimentos e melhora previsibilidade mensal |
@@ -348,30 +348,49 @@ schema de histórico ou trilha de status pré-cancelamento nesta frente.
 # 8. FASE 4 — Central de contas a receber e cobrança
 
 **Prioridade:** MUITO ALTA
+**Backend:** INTEGRADO / CLOSED_INTEGRATED
+**Frontend:** NÃO IMPLEMENTADO — protótipo obrigatório e aprovação visual do Founder antes da implementação
+**Implementação backend:** `3e2ac05b3f45f2c9342473063ab457f83f0c14bc`
+**Auditoria independente:** `FINANPE-CENTRAL-AR-AUDITOR-116` — PASS
 
 ## 8.1 Objetivo
 
 Transformar lançamentos pendentes em uma fila operacional de cobrança.
 
-## 8.2 Fonte de verdade
+## 8.2 Contrato V1 integrado do backend
 
-Usar `LancamentoFinanceiro` existente.
+O backend V1 é um read model somente leitura. A fonte de verdade é o
+`LancamentoFinanceiro`; cada linha do ledger representa um item a receber.
 
-Considerar contas a receber:
+Contas ativas são exatamente `tipo='ENTRADA'` e `status='PENDENTE'`, sem
+restrição de categoria e sem exigir vínculo estruturado de projeto/cliente
+para inclusão financeira. `SAIDA`, `PAGO` e `CANCELADO` ficam fora do
+universo ativo. Parcelas criadas na aprovação permanecem como linhas
+separadas.
 
-- `tipo='ENTRADA'`;
-- `status='PENDENTE'`.
+O seletor público é
+`central_contas_receber(*, data_referencia: date) -> CentralContasReceber`
+em `apps/financeiro/selectors.py`. A data de referência é explícita:
+`ATRASADO` quando o vencimento é anterior, `VENCE_HOJE` quando é igual e
+`A_VENCER` quando é posterior; janelas de 7 e 30 dias usam apenas
+`1 <= delta_dias <= 7` e `1 <= delta_dias <= 30`, excluindo hoje.
 
-Classificações recomendadas:
+Os quatro indicadores são total a receber, total vencido, clientes em
+atraso e maior atraso em dias. A dívida positiva exige valor exato maior
+que zero. O legado de valor zero permanece visível como `VALOR_ZERO`, mas
+contribui com zero, não cria inadimplência, atraso ou ação de cobrança.
 
-- **Vencido:** `data_vencimento < hoje`;
-- **Vence hoje:** `data_vencimento == hoje`;
-- **Próximos 7 dias**;
-- **Próximos 30 dias**.
+O backend não registra pagamento, cancela, altera vencimento, sincroniza
+saldo, emite `EventoSistema`, cria snapshot, modelo, migração ou mutação
+de serviço. Não há frontend nesta entrega.
 
-`PAGO` e `CANCELADO` não entram na cobrança ativa.
+## 8.3 Fonte de verdade e preparação da frente operacional
 
-## 8.3 Informações por cobrança
+O protótipo e a futura camada operacional devem preservar o contrato
+read-only integrado acima e usar `data_referencia`, sem inferir o dia
+atual implicitamente.
+
+## 8.4 Informações por cobrança
 
 Exibir:
 
@@ -383,9 +402,9 @@ Exibir:
 - valor;
 - forma prevista;
 - WhatsApp;
-- ação rápida de cobrança.
+- elegibilidade de contato estruturado para futura ação de cobrança.
 
-## 8.4 Indicadores
+## 8.5 Indicadores
 
 Exibir no topo:
 
@@ -394,20 +413,35 @@ Exibir no topo:
 - quantidade de clientes em atraso;
 - maior atraso em dias.
 
-## 8.5 WhatsApp
+## 8.6 WhatsApp
 
-Gerar mensagem de cobrança sem API paga, usando `wa.me`, preservando o padrão atual do produto.
+O backend fornece somente dados estruturados de contato e elegibilidade.
+Não gera URL ou mensagem, não envia, não chama API externa e não consulta
+`ConfiguracaoSistema`. A elegibilidade exige valor positivo válido,
+projeto/cliente resolvido, telefone não vazio e pelo menos um dígito após
+a remoção de não dígitos. Não existe regra de comprimento mínimo no
+seletor; a normalização `55` permanece na camada posterior de URL/frontend.
 
-A mensagem deve ser editável pelo usuário antes do envio.
+Qualquer mensagem editável e envio pertencem à futura frente frontend,
+após protótipo e aprovação visual do Founder.
 
-## 8.6 Critérios de aceite
+## 8.7 Critérios de aceite
 
 - nenhuma cobrança inclui `SAIDA`;
 - nenhuma cobrança inclui `PAGO`/`CANCELADO`;
 - datas limítrofes classificadas corretamente;
 - totalizadores batem com a soma das linhas;
 - lançamento quitado desaparece da lista ativa;
-- botão WhatsApp não realiza mutação financeira.
+- camada de contato não realiza mutação financeira;
+- o backend permanece sem modelo, migração, snapshot ou N+1.
+
+## 8.8 Estado de roadmap
+
+O backend/read model está `CLOSED_INTEGRATED`. O produto completo não está
+fechado: o frontend permanece `NOT_IMPLEMENTED`, o protótipo é obrigatório
+e a aprovação visual do Founder é pré-requisito para qualquer implementação
+frontend. A próxima ação é o protótipo da Central de A/R; a Fase 5 não é
+ativada antes da conclusão operacional da Fase 4.
 
 ---
 
@@ -878,9 +912,9 @@ Tela “Hoje” + integração visual dos módulos já estabilizados.
 
 # 19. Próxima ação recomendada
 
-1. descobrir o contrato read-only da Central de contas a receber / cobrança;
-2. fechar seu escopo e suas decisões antes de qualquer implementação;
-3. implementar e auditar a frente somente após autorização explícita;
+1. criar o protótipo da Central de contas a receber / cobrança;
+2. obter aprovação visual explícita do Founder;
+3. implementar e auditar o frontend somente após essa aprovação;
 4. seguir a sequência deste documento.
 
 O histórico de ações importantes já está integrado e deve ser usado pelas
@@ -896,7 +930,7 @@ próximas frentes quando novos eventos forem contratados.
 | Restauração de backup | INTEGRADA / CLOSED_INTEGRATED |
 | Histórico de ações | INTEGRADA / CLOSED_INTEGRATED |
 | Fechamento mensal | INTEGRADA / CLOSED_INTEGRATED |
-| Central de cobrança | PLANEJADA — NEXT DISCOVERY / CONTRACT |
+| Central de cobrança | BACKEND INTEGRADO / FRONTEND PROTÓTIPO NEXT |
 | Lucro por projeto | PLANEJADA — há decisão futura sobre mão de obra/projeto |
 | Cliente 360° | PLANEJADA |
 | Despesas recorrentes | PLANEJADA |
