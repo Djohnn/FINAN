@@ -1,0 +1,25 @@
+{% load static %}
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}FinanPE{% endblock %}</title>
+    {% block styles %}{% endblock %}
+</head>
+<body class="app-body">
+    <header class="site-header">
+        <div class="site-header__inner">
+            <div class="brand-mark" aria-label="FinanPE">
+                <span class="brand-mark__dot" aria-hidden="true"></span>
+                <span>FinanPE</span>
+            </div>
+            <span class="site-context">Gestão da marcenaria</span>
+        </div>
+    </header>
+    <main id="conteudo-principal">
+        {% block content %}{% endblock %}
+    </main>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

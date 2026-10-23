@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Central de contas a receber | FinanPE{% endblock %}
+
+{% block styles %}
+    <link rel="stylesheet" href="{% static 'financeiro/central_ar.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+    <section class="page-heading" aria-labelledby="page-title">
+        <div>
+            <p class="eyebrow">Financeiro</p>
+            <h1 id="page-title">Central de contas a receber</h1>
+            <p class="reference-date">Referência: {{ reference_date_label }}</p>
+        </div>
+        <span class="readonly-badge">Visão de consulta · sem alterações financeiras</span>
+    </section>
+
+    {% if not available %}
+        <section class="unavailable-panel" role="alert" aria-live="polite">
+            <strong>Central indisponível</strong>
+            <p>{{ error_message }}</p>
+        </section>
+    {% else %}
+        <section class="kpi-grid" aria-label="Indicadores da carteira completa">
+            {% for card in kpi_cards %}
+                <article class="kpi-card">
+                    <span class="kpi-label">{{ card.label }}</span>
+                    <strong class="kpi-value">{{ card.value }}</strong>
+                </article>
+            {% endfor %}
+        </section>
+
+        <section class="filter-panel" aria-labelledby="filters-title">
+            <div class="filter-panel__heading">
+                <h2 id="filters-title">Encontrar um recebível</h2>
+                {% if invalid_filters %}
+                    <p class="filter-notice" role="status">Alguns filtros inválidos foram ignorados.</p>
+                {% endif %}
+            </div>
+            <form method="get" class="filter-form">
+                <div class="field field--search">
+                    <label for="id_q">Buscar</label>
+                    <input id="id_q" name="q" type="search" value="{{ query }}" placeholder="Cliente, projeto ou descrição">
+                </div>
+                <div class="field">
+                    <label for="id_cliente">Cliente</label>
+                    <select id="id_cliente" name="cliente">
+                        <option value="">Todos os clientes</option>
+                        {% for option in client_options %}
+                            <option value="{{ option.id }}"{% if option.id == selected_client_id %} selected{% endif %}>{{ option.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="id_projeto">Projeto</label>
+                    <select id="id_projeto" name="projeto">
+                        <option value="">Todos os projetos</option>
+                        {% for option in project_options %}
+                            <option value="{{ option.id }}"{% if option.id == selected_project_id %} selected{% endif %}>{{ option.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="id_periodo">Período</label>
+                    <select id="id_periodo" name="periodo">
+                        {% for option in quick_filters %}
+                            <option value="{{ option.value }}"{% if option.value == selected_period %} selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-actions">
+                    <button class="button button--primary" type="submit">Aplicar filtros</button>
+                    <a class="button button--quiet" href="{% url 'financeiro:central_contas_receber' %}">Limpar</a>
+                </div>
+            </form>
+            <div class="quick-filter-list" aria-label="Contagens por período">
+                {% for option in quick_filters %}
+                    <a class="quick-filter{% if option.value == selected_period %} quick-filter--active{% endif %}" href="?periodo={{ option.value }}">
+                        <span>{{ option.label }}</span>
+                        <strong>{{ option.count }}</strong>
+                    </a>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="table-panel" aria-labelledby="table-title">
+            <div class="table-panel__heading">
+                <div>
+                    <h2 id="table-title">Recebíveis ativos</h2>
+                    <p>{{ filtered_count }} de {{ total_count }} recebíveis exibidos</p>
+                </div>
+            </div>
+            {% if rows %}
+                <div class="table-scroll">
+                    <table>
+                        <caption class="visually-hidden">Carteira de contas a receber</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Recebível</th>
+                                <th scope="col">Cliente / Projeto</th>
+                                <th scope="col">Vencimento</th>
+                                <th scope="col">Valor</th>
+                                <th scope="col">Forma prevista</th>
+                                <th scope="col">Situação</th>
+                                <th scope="col">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in rows %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ item.row.descricao }}</strong>
+                                        <span class="secondary-text">Recebível #{{ item.row.lancamento_id }}</span>
+                                    </td>
+                                    <td>
+                                        <strong>{{ item.cliente_label }}</strong>
+                                        <span class="secondary-text">{{ item.projeto_label }}</span>
+                                    </td>
+                                    <td>{{ item.vencimento }}</td>
+                                    <td><strong class="money">{{ item.valor }}</strong></td>
+                                    <td>{{ item.forma }}</td>
+                                    <td>
+                                        <span class="status-badge {{ item.situacao_class }}">{{ item.situacao }}</span>
+                                        {% if item.atraso_contexto != item.situacao %}
+                                            <span class="secondary-text">{{ item.atraso_contexto }}</span>
+                                        {% endif %}
+                                        {% for label in item.integridade %}
+                                            <span class="integrity-text">{{ label }}</span>
+                                        {% endfor %}
+                                    </td>
+                                    <td>
+                                        {% if item.row.whatsapp_elegivel %}
+                                            <button
+                                                class="button button--whatsapp js-whatsapp-compose"
+                                                type="button"
+                                                data-whatsapp="{{ item.row.cliente_whatsapp }}"
+                                                data-cliente="{{ item.row.cliente_nome }}"
+                                                data-projeto="{{ item.row.projeto_titulo }}"
+                                                data-valor="{{ item.valor }}"
+                                                data-vencimento="{{ item.vencimento }}"
+                                            >Cobrar no WhatsApp</button>
+                                        {% else %}
+                                            <span class="action-muted">Sem ação</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <strong>Nenhum recebível encontrado</strong>
+                    <p>Ajuste os filtros para consultar a carteira completa.</p>
+                </div>
+            {% endif %}
+        </section>
+    {% endif %}
+</div>
+
+<dialog id="whatsapp-modal" class="whatsapp-modal" role="dialog" aria-modal="true" aria-labelledby="whatsapp-modal-title">
+    <div class="modal-header">
+        <div>
+            <p class="eyebrow">Contato de cobrança</p>
+            <h2 id="whatsapp-modal-title">Revisar mensagem</h2>
+        </div>
+        <button class="modal-close js-modal-close" type="button" aria-label="Fechar">Fechar</button>
+    </div>
+    <div class="modal-summary" aria-live="polite">
+        <p><strong id="modal-customer">Cliente</strong><span id="modal-project">Projeto</span></p>
+        <p><strong id="modal-amount">R$ 0,00</strong><span id="modal-due">Vencimento</span></p>
+    </div>
+    <label class="field" for="whatsapp-message">Mensagem editável</label>
+    <textarea id="whatsapp-message" rows="7"></textarea>
+    <div class="modal-actions">
+        <button class="button button--quiet js-modal-close" type="button">Voltar</button>
+        <button class="button button--quiet js-modal-close" type="button">Cancelar</button>
+        <button class="button button--primary" id="open-whatsapp" type="button">Abrir no WhatsApp</button>
+    </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{% static 'financeiro/central_ar.js' %}"></script>
+{% endblock %}
