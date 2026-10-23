@@ -68,8 +68,8 @@ O histórico de ações, por exemplo, é prioridade média para o usuário, mas 
 | 0 | Idempotência de pagamento de funcionário | Núcleo concluído | Risco financeiro integrado e auditado |
 | 1 | Restauração de backup / recuperação | **Crítica — concluída** | Evita perda definitiva da empresa em falha de disco/DB |
 | 2 | Histórico de ações importantes | Integrada | Evita retrofit nas próximas frentes |
-| 3 | Fechamento Mensal / Semáforo | **Muito alta — próxima frente condicionada a decisões** | Fecha núcleo financeiro já previsto e alimenta indicadores |
-| 4 | Central de contas a receber / cobrança | **Muito alta** | Impacto direto em caixa e inadimplência |
+| 3 | Fechamento Mensal / Semáforo | **Integrada / CLOSED_INTEGRATED** | Fecha o núcleo financeiro e alimenta indicadores |
+| 4 | Central de contas a receber / cobrança | **Muito alta — próxima frente de descoberta/contrato** | Impacto direto em caixa e inadimplência |
 | 5 | Lucro/margem por projeto | **Muito alta** | Mostra quais serviços realmente geram resultado |
 | 6 | Visão 360° do cliente | Alta | Concentra memória comercial e operacional |
 | 7 | Despesas recorrentes | Média/Alta | Reduz esquecimentos e melhora previsibilidade mensal |
@@ -239,8 +239,8 @@ não há auto-migração ou conversão de backups antigos.
 ## 6.4 Precisão do contrato
 
 O histórico integrado cobre as ações V1 definidas acima. Novas ações,
-incluindo fechamento mensal, somente entram após contrato próprio e decisão
-Founder quando aplicável.
+incluindo o fechamento mensal, entram com contrato próprio e decisão Founder
+quando aplicável. O fechamento mensal V1 está agora integrado e fechado.
 
 ---
 
@@ -248,6 +248,10 @@ Founder quando aplicável.
 
 **Prioridade:** MUITO ALTA
 **Origem:** requisito já existente no PRD.
+**Estado:** INTEGRADA / CLOSED_INTEGRATED
+**Implementação:** `0169a6439fbabb820e0fd11282c415a1207edfc9`
+**Auditoria independente:** `FINANPE-MONTHLY-CLOSING-AUDITOR-113` — PASS
+**Evidência:** 31 testes focados, 163 relacionados, 338 testes completos e 65/65 probes independentes.
 
 ## 7.1 Objetivo
 
@@ -276,25 +280,68 @@ Calcular:
 - margem líquida;
 - semáforo.
 
-## 7.3 Decisões ainda necessárias antes da implementação
+## 7.3 Decisões Founder integradas
 
-Precisam ser fechadas explicitamente:
+As decisões 1A a 7A estão fechadas e fazem parte do contrato V1:
 
-1. papel do Django Admin: apenas técnico/manutenção ou também operacional;
-2. se categoria `OUTROS` entra em “outras saídas”;
-3. comportamento de margem quando receita é zero;
-4. regra de inadimplência no fechamento;
-5. tratamento de saída `FUNCIONARIO` sem FK de funcionário.
+1. Django Admin permanece técnico/manutenção; o fechamento mensal não é uma
+   funcionalidade operacional do Admin.
+2. Categoria `OUTROS` entra em “outras saídas”; toda `SAIDA` realizada,
+   exceto `FUNCIONARIO`, contribui para esse total.
+3. Com receita zero, `margem_percentual` é `None`; saldo zero é amarelo e
+   saldo negativo é vermelho.
+4. A inadimplência usa `data_vencimento <=` o fim do mês selecionado e
+   considera `PENDENTE` ou `PAGO` com `data_pagamento` após o corte, sem
+   limite inferior de origem.
+5. `FUNCIONARIO` realizado sem funcionário é incluído no custo e agrupado
+   como `Sem funcionário vinculado`.
+6. A precedência do semáforo é: saldo negativo vermelho; depois qualquer
+   inadimplência amarelo; depois receita e saldo positivos com margem exata
+   de pelo menos 15% verde; caso contrário amarelo.
+7. O V1 usa o estado atual do ledger: `CANCELADO` atual fica fora da
+   inadimplência, sem reconstrução de timestamp de cancelamento ou histórico
+   pré-cancelamento.
 
-### Recomendação atual do Coordenador
+## 7.4 Contrato técnico V1 integrado
 
-- Admin técnico apenas;
-- `OUTROS` incluído nas outras saídas;
-- receita zero: margem `None`; saldo zero amarelo; saldo negativo vermelho;
-- inadimplência: toda ENTRADA vencida até o fim do mês e ainda não paga naquele corte, inclusive originada antes;
-- funcionário nulo: incluir no total e exibir “Sem funcionário vinculado”.
+O seletor público é `apps/financeiro/selectors.py`:
 
-Essas recomendações precisam de aprovação do Founder antes da implementação.
+```python
+fechamento_mensal(*, ano: int, mes: int) -> FechamentoMensal
+```
+
+Os modelos de leitura são `EntradaPorForma`, `CustoFuncionario` e
+`FechamentoMensal`, em dataclasses imutáveis com coleções baseadas em tupla.
+Não há persistência de fechamento, snapshot mensal, modelo novo ou migration.
+
+Qualquer lançamento `PAGO` sem `data_pagamento` torna o fechamento
+indisponível com o erro exato:
+
+`Fechamento mensal indisponível: lançamento PAGO sem data_pagamento.`
+
+Não há fallback para `data_vencimento`, inferência de data ou resultado
+parcial. O mês realizado usa `status='PAGO'` e `data_pagamento` dentro do
+mês selecionado, com entradas por forma na ordem `PIX`, `CARTAO_CREDITO`,
+`CARTAO_DEBITO`, `DINHEIRO`, `BOLETO`, preenchendo ausências com zero.
+
+O saldo é entradas menos custo de funcionários menos outras saídas. A
+acumulação monetária usa centavos inteiros após validação, sem float como
+fonte de verdade e sem dependência do contexto Decimal do chamador. A
+validação rejeita verdadeira sobreprecisão monetária antes da agregação,
+inclusive valores como `1.234`, `1.230000000000001` e `99999999.99000001`.
+
+As anomalias relevantes seguem a precedência: validação de entrada, `PAGO`
+sem data, `status`, `tipo`, `categoria`, `forma_pagamento` e `valor`, com
+mensagens controladas por campo. O fluxo é somente leitura, não emite
+`EventoSistema`, não chama serviço de mutação e não faz uma consulta por
+funcionário; a auditoria mediu uma consulta nos fixtures pequeno e de 101
+funcionários.
+
+## 7.5 Limitação histórica aceita
+
+O fechamento não reconstrói cancelamentos retroativos. A inadimplência é
+calculada sobre o estado corrente do ledger, e não existe snapshot,
+schema de histórico ou trilha de status pré-cancelamento nesta frente.
 
 ---
 
@@ -831,9 +878,9 @@ Tela “Hoje” + integração visual dos módulos já estabilizados.
 
 # 19. Próxima ação recomendada
 
-1. obter as decisões Founder do Fechamento Mensal / Semáforo;
-2. fechar o contrato V1 do fechamento sem inferir respostas;
-3. implementar e auditar o fechamento somente após as decisões explícitas;
+1. descobrir o contrato read-only da Central de contas a receber / cobrança;
+2. fechar seu escopo e suas decisões antes de qualquer implementação;
+3. implementar e auditar a frente somente após autorização explícita;
 4. seguir a sequência deste documento.
 
 O histórico de ações importantes já está integrado e deve ser usado pelas
@@ -848,8 +895,8 @@ próximas frentes quando novos eventos forem contratados.
 | Idempotência pagamento funcionário | INTEGRADA |
 | Restauração de backup | INTEGRADA / CLOSED_INTEGRATED |
 | Histórico de ações | INTEGRADA / CLOSED_INTEGRATED |
-| Fechamento mensal | PLANEJADA — NEXT, decisões Founder pendentes |
-| Central de cobrança | PLANEJADA |
+| Fechamento mensal | INTEGRADA / CLOSED_INTEGRATED |
+| Central de cobrança | PLANEJADA — NEXT DISCOVERY / CONTRACT |
 | Lucro por projeto | PLANEJADA — há decisão futura sobre mão de obra/projeto |
 | Cliente 360° | PLANEJADA |
 | Despesas recorrentes | PLANEJADA |
