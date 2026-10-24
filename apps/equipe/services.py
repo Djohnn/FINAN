@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from apps.core_sistema.services import registrar_evento
 from apps.financeiro.models import LancamentoFinanceiro
+from apps.kanban_projetos.models import ProjetoKanban
 from .models import Funcionario
 
 
@@ -71,12 +72,23 @@ def lancar_pagamento_funcionario_service(
     pago_hoje: bool = True,
     data_vencimento=None,
     observacao: str = '',
+    projeto_id: int | None = None,
 ) -> LancamentoFinanceiro:
     """
     Lança um pagamento para colaborador/funcionário, calculando o valor
     multiplicado pelos períodos/diárias trabalhadas ou usando um valor customizado.
     Gera um lançamento financeiro de SAÍDA na categoria FUNCIONARIO.
     """
+    if projeto_id is None:
+        projeto = None
+    else:
+        if type(projeto_id) is not int or projeto_id <= 0:
+            raise ValidationError("Projeto inválido.")
+        try:
+            projeto = ProjetoKanban.objects.get(pk=projeto_id)
+        except ProjetoKanban.DoesNotExist:
+            raise ValidationError("Projeto inválido.") from None
+
     funcionario = Funcionario.objects.select_for_update().get(id=funcionario_id)
 
     valid_payment_methods = {
@@ -122,6 +134,7 @@ def lancar_pagamento_funcionario_service(
             valor=valor_final,
             forma_pagamento=forma_pagamento,
             status=status,
+            projeto=projeto,
             descricao__startswith=_payment_description_prefix(funcionario),
         )
         .order_by('pk')
@@ -136,6 +149,7 @@ def lancar_pagamento_funcionario_service(
         tipo='SAIDA',
         categoria='FUNCIONARIO',
         funcionario=funcionario,
+        projeto=projeto,
         descricao=desc_base,
         valor=valor_final,
         forma_pagamento=forma_pagamento,
