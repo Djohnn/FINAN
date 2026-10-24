@@ -3,7 +3,7 @@ import re
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal, ROUND_HALF_EVEN, localcontext
+from decimal import Context, Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
 from typing import Literal
 
 from django.core.exceptions import ValidationError
@@ -11,6 +11,7 @@ from django.db.models import BooleanField, Case, CharField, F, Value, When
 from django.db.models.functions import Cast, Round
 
 from apps.financeiro.models import LancamentoFinanceiro
+from apps.kanban_projetos.models import ProjetoKanban
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,13 @@ def _percent(numerator: Decimal, revenue: Decimal) -> Decimal | None:
     with localcontext() as context:
         context.prec = 28
         context.rounding = ROUND_HALF_EVEN
+        return numerator / revenue * Decimal('100')
+
+
+def _rentabilidade_percent(numerator: Decimal, revenue: Decimal) -> Decimal | None:
+    if revenue <= _ZERO:
+        return None
+    with localcontext(Context(prec=28, rounding=ROUND_HALF_EVEN)):
         return numerator / revenue * Decimal('100')
 
 
@@ -346,3 +354,324 @@ def central_contas_receber(*, data_referencia: date) -> CentralContasReceber:
         total_vencido=_money(overdue), clientes_em_atraso=len(overdue_customers),
         maior_atraso_dias=maximum, recebiveis=tuple(receivables),
     )
+
+
+CategoriaCustoDiretoProjeto = Literal['MATERIA_PRIMA', 'FUNCIONARIO', 'OUTROS']
+EstadoRentabilidadeProjeto = Literal['DISPONIVEL', 'SEM_CONTRATO', 'INCONSISTENTE']
+
+
+@dataclass(frozen=True)
+class CustoDiretoProjeto:
+    categoria: CategoriaCustoDiretoProjeto
+    total: Decimal
+    pendente: Decimal
+    pago: Decimal
+
+
+@dataclass(frozen=True)
+class RentabilidadeProjeto:
+    projeto_id: int
+    titulo_servico: str
+    etapa: str
+    estado: EstadoRentabilidadeProjeto
+    inconsistencias: tuple[str, ...]
+    valor_contratado: Decimal | None
+    valor_recebido: Decimal | None
+    saldo_a_receber: Decimal | None
+    custos_diretos_por_categoria: tuple[CustoDiretoProjeto, ...] | None
+    custos_diretos: Decimal | None
+    lucro_direto: Decimal | None
+    margem_direta_percentual: Decimal | None
+    entradas_realizadas: Decimal | None
+    saidas_realizadas: Decimal | None
+    caixa_liquido_realizado: Decimal | None
+
+
+@dataclass(frozen=True)
+class ProjetosRentabilidade:
+    projetos: tuple[RentabilidadeProjeto, ...]
+
+
+_RENTABILIDADE_ETAPAS = (
+    '1_CONTATO', '2_ORCAMENTO', '3_APROVADO', '4_PRODUCAO',
+    '5_ENTREGA', '6_FINALIZADO', '9_ARQUIVADO',
+)
+_RENTABILIDADE_ETAPA_RANK = {
+    etapa: rank for rank, etapa in enumerate(_RENTABILIDADE_ETAPAS)
+}
+_RENTABILIDADE_CATEGORIAS_DIRETAS = ('MATERIA_PRIMA', 'FUNCIONARIO', 'OUTROS')
+_RENTABILIDADE_AVISOS = (
+    'CONTRATO_DIVERGE_DO_LEDGER',
+    'PENDENTE_COM_DATA_PAGAMENTO',
+    'VALOR_ZERO',
+    'CUSTO_FIXO_OFICINA_VINCULADO_EXCLUIDO',
+    'SERVICO_CLIENTE_EM_SAIDA',
+    'ENTRADA_NAO_SERVICO_CLIENTE_EXCLUIDA',
+)
+_RENTABILIDADE_FATAIS = (
+    'ETAPA_INVALIDA',
+    'VALOR_CONTRATADO_INVALIDO',
+    'PAGO_SEM_DATA_PAGAMENTO',
+    'STATUS_INVALIDO',
+    'TIPO_INVALIDO',
+    'CATEGORIA_INVALIDA',
+    'VALOR_MONETARIO_INVALIDO',
+)
+
+
+def _rentabilidade_rows_with_money(queryset, field_name: str, raw_name: str, exact_name: str):
+    """Project raw money text and an exact-cent database-side flag."""
+    return queryset.annotate(
+        **{
+            raw_name: Cast(field_name, CharField()),
+            exact_name: Case(
+                When(
+                    **{field_name: Round(F(field_name), precision=2)},
+                    then=Value(True),
+                ),
+                default=Value(False),
+                output_field=BooleanField(),
+            ),
+        },
+    )
+
+
+def _rentabilidade_cents(raw_value, exact_cents: bool) -> int:
+    """Validate stored money before converting it to integer cents."""
+    if not exact_cents:
+        raise ValueError('centavos inexatos')
+    try:
+        amount = LancamentoFinanceiro.validar_valor_monetario(
+            raw_value,
+            permitir_zero=True,
+        )
+        numerator, denominator = amount.as_integer_ratio()
+        cents, remainder = divmod(numerator * 100, denominator)
+        if remainder:
+            raise ValueError('centavos inexatos')
+        return cents
+    except (InvalidOperation, TypeError, ValueError, ValidationError):
+        raise ValueError('valor monetário inválido') from None
+
+
+def _rentabilidade_project_rows(*, projeto_id: int | None = None) -> list[dict]:
+    queryset = ProjetoKanban.objects.order_by()
+    if projeto_id is not None:
+        queryset = queryset.filter(pk=projeto_id)
+    return list(_rentabilidade_rows_with_money(
+        queryset,
+        'valor_total',
+        'raw_valor_contratado',
+        'valor_contratado_exato',
+    ).values(
+        'id', 'titulo_servico', 'etapa',
+        'raw_valor_contratado', 'valor_contratado_exato',
+    ))
+
+
+def _rentabilidade_ledger_rows(project_ids: list[int]) -> list[dict]:
+    if not project_ids:
+        return []
+    queryset = LancamentoFinanceiro.objects.filter(
+        projeto_id__in=project_ids,
+    ).order_by()
+    return list(_rentabilidade_rows_with_money(
+        queryset,
+        'valor',
+        'raw_valor',
+        'valor_exato',
+    ).values(
+        'projeto_id', 'status', 'tipo', 'categoria', 'data_pagamento',
+        'raw_valor', 'valor_exato',
+    ))
+
+
+def _rentabilidade_project_result(project_row: dict, ledger_rows: list[dict]) -> RentabilidadeProjeto:
+    project_id = project_row['id']
+    title = project_row['titulo_servico']
+    stage = project_row['etapa']
+    fatal: set[str] = set()
+    warnings: set[str] = set()
+
+    if stage not in _RENTABILIDADE_ETAPA_RANK:
+        fatal.add('ETAPA_INVALIDA')
+
+    contract_cents: int | None
+    try:
+        contract_cents = _rentabilidade_cents(
+            project_row['raw_valor_contratado'],
+            project_row['valor_contratado_exato'],
+        )
+    except ValueError:
+        contract_cents = None
+        fatal.add('VALOR_CONTRATADO_INVALIDO')
+
+    statuses = {key for key, _label in LancamentoFinanceiro.STATUS_CHOICES}
+    types = {key for key, _label in LancamentoFinanceiro.TIPO_CHOICES}
+    categories = {key for key, _label in LancamentoFinanceiro.CATEGORIA_CHOICES}
+
+    revenue_paid = 0
+    revenue_pending = 0
+    reconciliation = 0
+    category_totals = {
+        category: {'pendente': 0, 'pago': 0}
+        for category in _RENTABILIDADE_CATEGORIAS_DIRETAS
+    }
+
+    for row in ledger_rows:
+        status = row['status']
+        if status not in statuses:
+            fatal.add('STATUS_INVALIDO')
+            continue
+        if status == 'CANCELADO':
+            continue
+
+        tipo = row['tipo']
+        if tipo not in types:
+            fatal.add('TIPO_INVALIDO')
+            continue
+
+        categoria = row['categoria']
+        if categoria not in categories:
+            fatal.add('CATEGORIA_INVALIDA')
+            continue
+
+        is_commercial = tipo == 'ENTRADA' and categoria == 'SERVICO_CLIENTE'
+        is_direct = tipo == 'SAIDA' and categoria in _RENTABILIDADE_CATEGORIAS_DIRETAS
+        if not is_commercial and not is_direct:
+            if tipo == 'ENTRADA':
+                warnings.add('ENTRADA_NAO_SERVICO_CLIENTE_EXCLUIDA')
+            elif categoria == 'CUSTO_FIXO_OFICINA':
+                warnings.add('CUSTO_FIXO_OFICINA_VINCULADO_EXCLUIDO')
+            elif categoria == 'SERVICO_CLIENTE':
+                warnings.add('SERVICO_CLIENTE_EM_SAIDA')
+            continue
+
+        if status == 'PAGO' and row['data_pagamento'] is None:
+            fatal.add('PAGO_SEM_DATA_PAGAMENTO')
+        elif status == 'PENDENTE' and row['data_pagamento'] is not None:
+            warnings.add('PENDENTE_COM_DATA_PAGAMENTO')
+
+        try:
+            cents = _rentabilidade_cents(row['raw_valor'], row['valor_exato'])
+        except ValueError:
+            fatal.add('VALOR_MONETARIO_INVALIDO')
+            continue
+
+        if cents == 0:
+            warnings.add('VALOR_ZERO')
+
+        if is_commercial:
+            reconciliation += cents
+            if status == 'PAGO':
+                revenue_paid += cents
+            else:
+                revenue_pending += cents
+        else:
+            category_totals[categoria][status.lower()] += cents
+
+    fatal_codes = tuple(code for code in _RENTABILIDADE_FATAIS if code in fatal)
+    if not fatal_codes and contract_cents is not None and reconciliation != contract_cents:
+        warnings.add('CONTRATO_DIVERGE_DO_LEDGER')
+    inconsistency_codes = fatal_codes + tuple(
+        code for code in _RENTABILIDADE_AVISOS if code in warnings
+    )
+    if fatal_codes:
+        return RentabilidadeProjeto(
+            projeto_id=project_id,
+            titulo_servico=title,
+            etapa=stage,
+            estado='INCONSISTENTE',
+            inconsistencias=inconsistency_codes,
+            valor_contratado=None,
+            valor_recebido=None,
+            saldo_a_receber=None,
+            custos_diretos_por_categoria=None,
+            custos_diretos=None,
+            lucro_direto=None,
+            margem_direta_percentual=None,
+            entradas_realizadas=None,
+            saidas_realizadas=None,
+            caixa_liquido_realizado=None,
+        )
+
+    assert contract_cents is not None
+    categories = tuple(
+        CustoDiretoProjeto(
+            categoria=category,
+            total=_money(category_totals[category]['pendente'] + category_totals[category]['pago']),
+            pendente=_money(category_totals[category]['pendente']),
+            pago=_money(category_totals[category]['pago']),
+        )
+        for category in _RENTABILIDADE_CATEGORIAS_DIRETAS
+    )
+    direct_cents = sum(
+        category_totals[category]['pendente'] + category_totals[category]['pago']
+        for category in _RENTABILIDADE_CATEGORIAS_DIRETAS
+    )
+    paid_cost_cents = sum(
+        category_totals[category]['pago']
+        for category in _RENTABILIDADE_CATEGORIAS_DIRETAS
+    )
+    profit_cents = contract_cents - direct_cents
+    contract = _money(contract_cents)
+    received = _money(revenue_paid)
+    pending = _money(revenue_pending)
+    direct = _money(direct_cents)
+    profit = _money(profit_cents)
+    paid_cost = _money(paid_cost_cents)
+    cash = _money(revenue_paid - paid_cost_cents)
+    return RentabilidadeProjeto(
+        projeto_id=project_id,
+        titulo_servico=title,
+        etapa=stage,
+        estado='SEM_CONTRATO' if contract_cents == 0 else 'DISPONIVEL',
+        inconsistencias=inconsistency_codes,
+        valor_contratado=contract,
+        valor_recebido=received,
+        saldo_a_receber=pending,
+        custos_diretos_por_categoria=categories,
+        custos_diretos=direct,
+        lucro_direto=profit,
+        margem_direta_percentual=_rentabilidade_percent(profit, contract),
+        entradas_realizadas=received,
+        saidas_realizadas=paid_cost,
+        caixa_liquido_realizado=cash,
+    )
+
+
+def _rentabilidade_sort_key(result: RentabilidadeProjeto):
+    return (
+        _RENTABILIDADE_ETAPA_RANK.get(result.etapa, len(_RENTABILIDADE_ETAPA_RANK)),
+        result.titulo_servico.casefold(),
+        result.projeto_id,
+    )
+
+
+def rentabilidade_projetos() -> ProjetosRentabilidade:
+    """Return current, read-only profitability for every Kanban project."""
+    project_rows = _rentabilidade_project_rows()
+    project_ids = [row['id'] for row in project_rows]
+    ledger_by_project: dict[int, list[dict]] = {project_id: [] for project_id in project_ids}
+    for row in _rentabilidade_ledger_rows(project_ids):
+        ledger_by_project[row['projeto_id']].append(row)
+    projects = tuple(sorted(
+        (
+            _rentabilidade_project_result(row, ledger_by_project[row['id']])
+            for row in project_rows
+        ),
+        key=_rentabilidade_sort_key,
+    ))
+    return ProjetosRentabilidade(projetos=projects)
+
+
+def rentabilidade_projeto(*, projeto_id: int) -> RentabilidadeProjeto:
+    """Return one current project profitability result without loading others."""
+    if type(projeto_id) is not int or projeto_id <= 0:
+        raise ValueError('projeto_id deve ser um inteiro positivo.')
+    project_rows = _rentabilidade_project_rows(projeto_id=projeto_id)
+    if not project_rows:
+        raise ValueError('Projeto não encontrado.')
+    project_row = project_rows[0]
+    ledger_rows = _rentabilidade_ledger_rows([projeto_id])
+    return _rentabilidade_project_result(project_row, ledger_rows)
