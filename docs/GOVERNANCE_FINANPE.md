@@ -241,15 +241,28 @@ Esses gates são distintos. `FOUNDER_LIVE_QA` permanece `PENDING` na ausência d
 ### 10.4 Contrato operacional do FinanQA
 
 ```text
-FINANQA_BIND=127.0.0.1
-FINANQA_PORT=5500
-FINANQA_SOURCE_BRANCH=main-validation
-FINANQA_SOURCE_SHA=EXACT_COMMIT_UNDER_QA
-FINANQA_DATABASE=ISOLATED_DISPOSABLE
+QA_NAME=FinanQA
+QA_HOST=127.0.0.1
+QA_PORT=5500
+QA_SOURCE_BRANCH=main-validation
+QA_SOURCE_SHA=EXACT_SHA_UNDER_TEST
+QA_DATABASE=ISOLATED_FROM_PRODUCTION
+QA_APPROVER=FOUNDER_ONLY
+FINANQA_BIND=127.0.0.1  # equivalente a QA_HOST
 PRODUCTION_DATABASE_USE=PROHIBITED
 ```
 
-O FinanQA deve executar a aplicação Django real, nunca um protótipo estático. O operador deve verificar o SHA exato, iniciar o servidor Django real, abrir o navegador no computador do Founder quando suportado, confirmar que o servidor está efetivamente ativo, verificar CSS e assets, preparar cenários sintéticos, deixar o ambiente disponível para o teste manual e relatar URLs e limitações. O operador não aprova QA. Screenshots e testes automatizados são evidência de apoio; não substituem a decisão do Founder.
+O FinanQA deve executar a aplicação Django real a partir do source validado, nunca um protótipo HTML estático. O operador deve verificar o SHA exato, iniciar o servidor Django real em `127.0.0.1:5500`, verificar que o servidor responde, confirmar CSS e assets, preparar cenários sintéticos e deixar o ambiente disponível para o teste manual.
+
+O handoff do navegador deve registrar separadamente:
+
+```text
+SERVER_RUNNING=YES|NO
+BROWSER_OPENED=YES|NO
+BROWSER_ACCESSIBLE_TO_FOUNDER=YES|NO
+```
+
+O operador deve tentar abrir a aplicação real no navegador do computador do Founder quando o ambiente permitir. Não pode declarar `BROWSER_OPENED=YES` sem evidência real. Se não puder abrir automaticamente, deve registrar a limitação e fornecer a URL local para abertura manual pelo Founder. O operador não aprova QA: o Founder deve interagir pessoalmente com a aplicação em execução. Screenshots e testes automatizados são evidência de apoio; não substituem a decisão do Founder. Somente o Founder pode declarar `FOUNDER_LIVE_QA=PASS` ou `FOUNDER_LIVE_QA=REJECTED`; sem acesso à aplicação real, o estado permanece `FOUNDER_LIVE_QA=PENDING`.
 
 ### 10.5 Promoção por SHA exato
 
