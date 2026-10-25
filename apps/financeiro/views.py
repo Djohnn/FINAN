@@ -2,9 +2,12 @@ import re
 from collections.abc import Iterable
 from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
 
+from django.http import HttpResponseServerError
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
+
+from apps.kanban_projetos.models import ProjetoKanban
 
 from .selectors import (
     CentralContasReceber,
@@ -446,6 +449,8 @@ def rentabilidade_projetos_view(request):
     """Render the current read-only profitability overview."""
     try:
         portfolio: ProjetosRentabilidade = rentabilidade_projetos()
+        project_ids = tuple(result.projeto_id for result in portfolio.projetos)
+        customer_names = rentabilidade_clientes(projeto_ids=project_ids)
     except ValueError:
         return render(
             request,
@@ -457,10 +462,9 @@ def rentabilidade_projetos_view(request):
                     "há uma inconsistência nos dados financeiros."
                 ),
             },
+            status=500,
         )
 
-    project_ids = tuple(result.projeto_id for result in portfolio.projetos)
-    customer_names = rentabilidade_clientes(projeto_ids=project_ids)
     projects = tuple(
         _profitability_row(result, customer_names.get(result.projeto_id))
         for result in portfolio.projetos
@@ -482,6 +486,10 @@ def rentabilidade_projeto_view(request, projeto_id: int):
     try:
         result = rentabilidade_projeto(projeto_id=projeto_id)
     except ValueError:
+        if ProjetoKanban.objects.filter(pk=projeto_id).exists():
+            return HttpResponseServerError(
+                "A rentabilidade do projeto não pode ser exibida com segurança no momento."
+            )
         return render(
             request,
             "financeiro/rentabilidade_projeto.html",
@@ -493,7 +501,12 @@ def rentabilidade_projeto_view(request, projeto_id: int):
             status=404,
         )
 
-    customer_names = rentabilidade_clientes(projeto_ids=(result.projeto_id,))
+    try:
+        customer_names = rentabilidade_clientes(projeto_ids=(result.projeto_id,))
+    except ValueError:
+        return HttpResponseServerError(
+            "A rentabilidade do projeto não pode ser exibida com segurança no momento."
+        )
     return render(
         request,
         "financeiro/rentabilidade_projeto.html",

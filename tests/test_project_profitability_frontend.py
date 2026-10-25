@@ -115,6 +115,18 @@ class ProjectProfitabilityFrontendTests(TestCase):
         self.assertContains(response, "Consulta somente leitura")
         self.assertContains(response, "Como ler o resultado")
 
+    def test_overview_selector_value_error_returns_safe_500(self):
+        with patch(
+            "apps.financeiro.views.rentabilidade_projetos",
+            side_effect=ValueError("internal selector failure"),
+        ):
+            response = self.client.get(self.overview_url)
+
+        self.assertEqual(response.status_code, 500)
+        self.assertContains(response, "Rentabilidade indisponível", status_code=500)
+        self.assertNotContains(response, "internal selector failure", status_code=500)
+        self.assertNotContains(response, "R$ 18.500,00", status_code=500)
+
     def test_named_detail_route_renders_read_only_screen(self):
         response, _selector = self.render_detail(make_result())
 
@@ -122,6 +134,28 @@ class ProjectProfitabilityFrontendTests(TestCase):
         self.assertContains(response, "Resultado econômico direto")
         self.assertContains(response, "Caixa realizado")
         self.assertContains(response, "Voltar para todos os projetos")
+
+    def test_detail_internal_value_error_for_existing_project_returns_safe_500(self):
+        customer = Cliente.objects.create(nome="Cliente com falha", whatsapp="11999990000")
+        project = ProjetoKanban.objects.create(
+            cliente=customer,
+            titulo_servico="Projeto com falha interna",
+            etapa="1_CONTATO",
+        )
+
+        with patch(
+            "apps.financeiro.views.rentabilidade_projeto",
+            side_effect=ValueError("internal selector failure"),
+        ):
+            response = self.client.get(
+                reverse("financeiro:rentabilidade_projeto", kwargs={"projeto_id": project.pk})
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertContains(response, "não pode ser exibida com segurança", status_code=500)
+        self.assertNotContains(response, "Projeto não encontrado", status_code=500)
+        self.assertNotContains(response, "internal selector failure", status_code=500)
+        self.assertNotContains(response, "R$ 18.500,00", status_code=500)
 
     def test_existing_ar_and_admin_routes_remain_available(self):
         self.assertEqual(self.client.get(reverse("financeiro:central_contas_receber")).status_code, 200)
@@ -305,6 +339,7 @@ class ProjectProfitabilityFrontendTests(TestCase):
         )
         response, _selector = self.render_detail(result)
 
+        self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Inconsistente")
         self.assertContains(response, "Resultado indisponível por inconsistência")
         self.assertContains(response, "Não disponível")
@@ -367,6 +402,7 @@ class ProjectProfitabilityFrontendTests(TestCase):
     def test_empty_overview_has_understandable_empty_state(self):
         response, _selectors = self.render_overview(())
 
+        self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Quando ainda não houver projetos")
         self.assertContains(response, "Projetos sem contrato continuam visíveis")
 
@@ -378,7 +414,7 @@ class ProjectProfitabilityFrontendTests(TestCase):
         self.assertContains(response, "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;")
 
     def test_unknown_project_is_controlled_not_found_without_traceback(self):
-        with patch("apps.financeiro.views.rentabilidade_projeto", side_effect=ValueError("Projeto não encontrado.")):
+        with patch("apps.financeiro.views.rentabilidade_projeto", side_effect=ValueError("internal selector failure")):
             response = self.client.get(
                 reverse("financeiro:rentabilidade_projeto", kwargs={"projeto_id": 999999})
             )
