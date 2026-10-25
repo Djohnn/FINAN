@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Rentabilidade por projeto | FinanPE{% endblock %}
+
+{% block styles %}
+    <link rel="stylesheet" href="{% static 'financeiro/project_profitability.css' %}">
+{% endblock %}
+
+{% block header_nav %}
+    <nav class="topnav" aria-label="Navegação financeira">
+        <a class="topnav__link topnav__link--active" href="{% url 'financeiro:rentabilidade_projetos' %}" aria-current="page">Projetos</a>
+        <a class="topnav__link" href="{% url 'financeiro:central_contas_receber' %}">A receber</a>
+    </nav>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell profitability-shell">
+    <section class="page-intro" aria-labelledby="page-title">
+        <div class="page-intro__copy">
+            <p class="section-label">Financeiro · leitura atual</p>
+            <h1 id="page-title">Rentabilidade por projeto</h1>
+            <p class="page-intro__lead">Veja, em linguagem simples, quais trabalhos geram resultado direto e quais precisam de atenção.</p>
+        </div>
+        <div class="read-only-note">
+            <span class="read-only-note__icon" aria-hidden="true">i</span>
+            <div>
+                <strong>Consulta somente leitura</strong>
+                <p>Esta visão usa o estado atual dos projetos e lançamentos. Ela não altera nada.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="contract-note" aria-labelledby="contract-note-title">
+        <div class="contract-note__mark" aria-hidden="true"></div>
+        <div>
+            <h2 id="contract-note-title">Como ler o resultado</h2>
+            <p><strong>Lucro direto</strong> é o valor contratado menos os custos diretamente ligados ao projeto. Custos pendentes já entram nessa conta. O bloco de caixa mostra apenas o que já foi pago ou recebido.</p>
+        </div>
+    </section>
+
+    {% if not available %}
+        <section class="unavailable-panel" role="alert" aria-live="polite">
+            <strong>Rentabilidade indisponível</strong>
+            <p>{{ error_message }}</p>
+        </section>
+    {% else %}
+        <section class="projects-section" aria-labelledby="projects-title">
+            <div class="section-heading">
+                <div>
+                    <h2 id="projects-title">Todos os projetos</h2>
+                    <p>Nenhum projeto desaparece por estar sem contrato ou sem movimentação financeira.</p>
+                </div>
+                <span class="section-heading__meta">Estados do read model</span>
+            </div>
+
+            {% if has_projects %}
+                <div class="project-list">
+                    {% for project in projects %}
+                        <article class="project-row project-row--{{ project.notice_class }}">
+                            <div class="project-row__main">
+                                <div class="project-row__title-line">
+                                    <div>
+                                        <h3>{{ project.result.titulo_servico }}</h3>
+                                        <p class="project-row__client">{{ project.project_meta }}</p>
+                                    </div>
+                                    <div class="tag-cluster">
+                                        <span class="stage-tag">{{ project.stage_label }}</span>
+                                        <span class="state-tag {{ project.state_class }}">{{ project.state_label }}</span>
+                                    </div>
+                                </div>
+
+                                {% if project.inconsistent %}
+                                    <div class="inconsistent-summary" role="status">
+                                        <span class="inconsistent-summary__symbol" aria-hidden="true">!</span>
+                                        <div>
+                                            <p>Há uma inconsistência no read model. Os valores não são exibidos para evitar um resultado parcial.</p>
+                                            {% for message in project.warning_messages %}<p class="integrity-message">{{ message }}</p>{% endfor %}
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <div class="project-metrics">
+                                        <div class="project-metric">
+                                            <span>Valor contratado</span>
+                                            <strong>{{ project.contracted }}</strong>
+                                        </div>
+                                        <div class="project-metric">
+                                            <span>Custos diretos</span>
+                                            <strong>{{ project.direct_costs }}</strong>
+                                        </div>
+                                        <div class="project-metric{% if project.profit_negative %} project-metric--negative{% else %} project-metric--positive{% endif %}">
+                                            <span>Lucro direto</span>
+                                            <strong>{{ project.profit }}</strong>
+                                        </div>
+                                        <div class="project-metric{% if project.profit_negative %} project-metric--negative{% else %} project-metric--positive{% endif %}{% if project.result.estado == 'SEM_CONTRATO' %} project-metric--muted{% endif %}">
+                                            <span>Margem direta</span>
+                                            <strong>{{ project.margin }}</strong>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="project-row__action">
+                                <span class="outcome-label outcome-label--{{ project.notice_class }}">{{ project.outcome_label }}</span>
+                                <a class="text-action" href="{% url 'financeiro:rentabilidade_projeto' projeto_id=project.result.projeto_id %}">Abrir detalhe <span aria-hidden="true">↗</span></a>
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <section class="empty-state empty-state--large" aria-labelledby="empty-title">
+                    <div class="empty-state__illustration" aria-hidden="true">
+                        <span></span><span class="empty-state__line--short"></span><span></span>
+                    </div>
+                    <div>
+                        <p class="section-label">Nenhum projeto cadastrado</p>
+                        <h2 id="empty-title">Quando ainda não houver projetos</h2>
+                        <p>Esta área mostrará os projetos assim que eles forem cadastrados. Projetos sem contrato continuam visíveis na lista.</p>
+                    </div>
+                </section>
+            {% endif %}
+        </section>
+    {% endif %}
+
+    <footer class="page-footer">
+        <span>Leitura atual · sem histórico de rentabilidade</span>
+        <span>FinanPE · somente leitura</span>
+    </footer>
+</div>
+{% endblock %}

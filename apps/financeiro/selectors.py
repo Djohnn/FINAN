@@ -1,9 +1,10 @@
 ﻿"""Read-only monthly closing over the current ledger (frozen V1 contract)."""
 import re
 from calendar import monthrange
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
-from decimal import Context, Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
+from decimal import ROUND_HALF_EVEN, Context, Decimal, InvalidOperation, localcontext
 from typing import Literal
 
 from django.core.exceptions import ValidationError
@@ -645,6 +646,22 @@ def _rentabilidade_sort_key(result: RentabilidadeProjeto):
         _RENTABILIDADE_ETAPA_RANK.get(result.etapa, len(_RENTABILIDADE_ETAPA_RANK)),
         result.titulo_servico.casefold(),
         result.projeto_id,
+    )
+
+
+def rentabilidade_clientes(*, projeto_ids: Iterable[int]) -> dict[int, str]:
+    """Return structured customer names for profitability presentation.
+
+    This additive lookup deliberately stays outside the frozen profitability
+    dataclasses and performs one joined query for the requested projects.
+    """
+    normalized_ids = tuple(dict.fromkeys(projeto_ids))
+    if not normalized_ids:
+        return {}
+    return dict(
+        ProjetoKanban.objects.filter(pk__in=normalized_ids).values_list(
+            'pk', 'cliente__nome'
+        )
     )
 
 

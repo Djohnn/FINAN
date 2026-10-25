@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Detalhe da rentabilidade | FinanPE{% endblock %}
+
+{% block styles %}
+    <link rel="stylesheet" href="{% static 'financeiro/project_profitability.css' %}">
+{% endblock %}
+
+{% block header_nav %}
+    <nav class="topnav" aria-label="Navegação financeira">
+        <a class="topnav__link" href="{% url 'financeiro:rentabilidade_projetos' %}">Projetos</a>
+        <a class="topnav__link topnav__link--active" href="{% if available %}{% url 'financeiro:rentabilidade_projeto' projeto_id=project.result.projeto_id %}{% else %}#{% endif %}"{% if available %} aria-current="page"{% endif %}>Detalhe</a>
+    </nav>
+{% endblock %}
+
+{% block content %}
+<div class="page-shell page-shell--detail profitability-shell">
+    <a class="back-link" href="{% url 'financeiro:rentabilidade_projetos' %}"><span aria-hidden="true">←</span> Voltar para todos os projetos</a>
+
+    {% if not available %}
+        <section class="unavailable-panel unavailable-panel--detail" role="alert" aria-live="polite">
+            <strong>Projeto não encontrado</strong>
+            <p>{{ error_message }}</p>
+        </section>
+    {% else %}
+        <section class="detail-heading" aria-labelledby="detail-title">
+            <div>
+                <div class="tag-cluster tag-cluster--heading">
+                    <span class="stage-tag">{{ project.stage_label }}</span>
+                    <span class="state-tag {{ project.state_class }}">{{ project.state_label }}</span>
+                </div>
+                <h1 id="detail-title">{{ project.result.titulo_servico }}</h1>
+                <p class="detail-heading__meta">{{ project.project_meta }}</p>
+            </div>
+        </section>
+
+        <section class="detail-notice detail-notice--{{ project.notice_class }}" role="status" aria-live="polite">
+            <span class="detail-notice__mark" aria-hidden="true">{{ project.notice_mark }}</span>
+            <div>
+                <strong>{{ project.notice_title }}</strong>
+                <p>{{ project.notice_copy }}</p>
+                {% if project.warning_codes %}
+                    <div class="integrity-codes" aria-label="Códigos de integridade">
+                        {% for code in project.warning_codes %}<span>Código: {{ code }}</span>{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="detail-section" aria-labelledby="commercial-title">
+            <div class="section-heading">
+                <div>
+                    <p class="section-label">1 · Comercial</p>
+                    <h2 id="commercial-title">O que foi combinado e o que falta receber</h2>
+                </div>
+                <p class="section-heading__helper">Valores ligados a este projeto</p>
+            </div>
+            <div class="metric-grid metric-grid--three">
+                <article class="metric-card">
+                    <span>Valor contratado</span>
+                    <strong>{{ project.contracted }}</strong>
+                </article>
+                <article class="metric-card">
+                    <span>Valor recebido</span>
+                    <strong>{{ project.received }}</strong>
+                </article>
+                <article class="metric-card metric-card--attention">
+                    <span>Saldo a receber</span>
+                    <strong>{{ project.remaining }}</strong>
+                </article>
+            </div>
+        </section>
+
+        <section class="detail-section" aria-labelledby="costs-title">
+            <div class="section-heading">
+                <div>
+                    <p class="section-label">2 · Custos diretos</p>
+                    <h2 id="costs-title">O que este projeto já consumiu</h2>
+                </div>
+                <p class="section-heading__helper">Pendente + pago = total do custo</p>
+            </div>
+            <div class="costs-panel{% if project.inconsistent %} costs-panel--unavailable{% endif %}">
+                {% if project.inconsistent %}
+                    <div class="unavailable-inline">
+                        <strong>Custos diretos não disponíveis</strong>
+                        <p>Os valores não são exibidos porque o projeto está inconsistente.</p>
+                    </div>
+                {% else %}
+                    <p class="costs-panel__scroll-hint">Em telas estreitas, cada categoria mostra total, pendente e pago em blocos empilhados.</p>
+                    <div class="costs-panel__scroll" role="region" tabindex="0" aria-label="Custos diretos por categoria, com total, pendente e pago.">
+                        <div class="costs-panel__header">
+                            <span>Categoria</span><span>Total</span><span>Pendente</span><span>Pago</span>
+                        </div>
+                        {% for cost in project.cost_rows %}
+                            <div class="cost-row">
+                                <span class="cost-row__category">{{ cost.label }}</span>
+                                <span class="cost-row__value cost-row__value--total" data-label="Total">{{ cost.total }}</span>
+                                <span class="cost-row__value" data-label="Pendente">{{ cost.pending }}</span>
+                                <span class="cost-row__value" data-label="Pago">{{ cost.paid }}</span>
+                            </div>
+                        {% endfor %}
+                        <div class="costs-panel__total">
+                            <strong>Total de custos diretos</strong>
+                            <strong>{{ project.direct_costs }}</strong>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="result-layout" aria-labelledby="result-title">
+            <div class="result-panel{% if project.profit_negative %} result-panel--negative{% endif %}{% if project.inconsistent %} result-panel--unavailable{% endif %}" id="result-panel">
+                <div class="section-heading section-heading--compact">
+                    <div>
+                        <p class="section-label">3 · Resultado</p>
+                        <h2 id="result-title">Resultado econômico direto</h2>
+                    </div>
+                </div>
+                {% if project.inconsistent %}
+                    <div class="result-unavailable">
+                        <strong>Resultado indisponível</strong>
+                        <p>Os valores são ocultados quando o read model identifica uma inconsistência fatal.</p>
+                    </div>
+                {% else %}
+                    <div class="result-figure">
+                        <span>Lucro direto</span>
+                        <strong{% if project.profit_negative %} class="value--negative"{% endif %}>{{ project.profit }}</strong>
+                        <p>{{ project.profit_explanation }}</p>
+                    </div>
+                    <div class="result-footer">
+                        <span>Margem direta</span>
+                        <strong{% if project.profit_negative %} class="value--negative"{% endif %}>{{ project.margin }}</strong>
+                    </div>
+                {% endif %}
+            </div>
+
+            <aside class="cash-panel" aria-labelledby="cash-title">
+                <div class="section-heading section-heading--compact">
+                    <div>
+                        <p class="section-label">4 · Caixa realizado</p>
+                        <h2 id="cash-title">O que já passou pelo caixa</h2>
+                    </div>
+                </div>
+                <p class="cash-panel__intro">Este bloco é separado do lucro direto. Ele considera somente entradas e saídas que já foram realizadas.</p>
+                <dl class="cash-list">
+                    <div><dt>Entradas realizadas</dt><dd>{{ project.cash_in }}</dd></div>
+                    <div><dt>Saídas realizadas</dt><dd>{{ project.cash_out }}</dd></div>
+                    <div class="cash-list__total"><dt>Caixa líquido realizado</dt><dd>{{ project.cash_net }}</dd></div>
+                </dl>
+            </aside>
+        </section>
+
+        <section class="detail-footnote" aria-labelledby="footnote-title">
+            <div class="detail-footnote__mark" aria-hidden="true">i</div>
+            <div>
+                <h2 id="footnote-title">Uma leitura simples, sem rateio inventado</h2>
+                <p>Somente lançamentos explicitamente ligados ao projeto entram nesta leitura. Custos gerais da oficina ficam fora do resultado individual.</p>
+            </div>
+        </section>
+    {% endif %}
+
+    <footer class="page-footer">
+        <span>Estado atual · sem histórico de rentabilidade</span>
+        <span><a href="{% url 'financeiro:rentabilidade_projetos' %}">Voltar à visão geral</a></span>
+    </footer>
+</div>
+{% endblock %}
