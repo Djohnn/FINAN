@@ -202,3 +202,74 @@ Silêncio do Founder não significa aprovação. Depois da implementação, `IMP
 Lacunas confirmadas na inspeção histórica: ausência de governança formal além de `.cursorrules`; ausência de camada web; ausência de autorização por ação e escopo; ausência de testes de negação/HTMX; ausência de `ruff`/`mypy`; ausência de identidade Git verificável naquele ambiente; ausência de prova de RLS PostgreSQL; ausência de registro de auditoria/idempotency key nos services observados.
 
 A recomendação da inspeção original era obter decisão de escopo e autorização para desenhar o modelo de usuários/ações/escopos. A decisão posterior do Founder aprovou a V1 local de usuário único sem login; esse desenho de autorização fica condicionado à evolução futura correspondente e não bloqueia, por si só, a V1. O inventário histórico não autoriza implementar endpoints, migrations, PostgreSQL ou Passo 4; qualquer frontend novo ou mudança visual relevante depende do gate visual acima. O estado operacional e os checkpoints faltantes serão reconciliados exclusivamente pelo Scheduler, sem edição de `docs/PROJECT_STATE.md` nesta composição.
+
+## 10. Fluxo canônico de validação e promoção (efetivo em 2026-10-25)
+
+Esta seção registra a decisão prospectiva do Founder de 2026-10-25. Integrações anteriores não devem ser classificadas retroativamente como violações desta regra.
+
+### 10.1 Branches canônicas
+
+`main-validation` é a branch de validação intermediária. Ela recebe trabalho intermediário auditado, pode conter backend antes do frontend, módulos ainda incompletos e peças desenvolvidas separadamente, e serve como fonte exata do FinanQA. Não é a versão final aprovada, não herda automaticamente um `QA PASS` e exige integração controlada, auditorias independentes apropriadas e autorização explícita para alterações.
+
+`main` é a branch final de release. Não recebe desenvolvimento direto, features não aprovadas nem pushes de agentes/desenvolvedores fora do protocolo de promoção. Recebe somente o target exato aprovado no FinanQA, após autorização final explícita do Founder. Um conjunto de testes backend passando não autoriza promoção para `main`.
+
+`main-validation` não deve ser chamada de produção nem de destino final de release.
+
+### 10.2 Gates independentes
+
+| Gate | Significado | Autoridade |
+|---|---|---|
+| `TECHNICAL_PASS` | Testes técnicos, qualidade estática e auditoria independente do escopo implementado passaram com evidência reproduzível. | Executor + auditor independente; não promove sozinho. |
+| `INTEGRATION_VALIDATION_PASS` | O target integrado em `main-validation` foi verificado como composição coerente e é o source SHA exato preparado para o FinanQA. | Coordenador após evidência técnica e de integração. |
+| `FOUNDER_LIVE_QA_PASS` | O Founder testou manualmente a aplicação Django real no navegador e aprovou o SHA exato. | Exclusivamente Founder. |
+| `FOUNDER_PROMOTION_APPROVAL` | O Founder autorizou explicitamente promover aquele mesmo SHA aprovado para `main`. | Exclusivamente Founder. |
+
+Esses gates são distintos. `FOUNDER_LIVE_QA` permanece `PENDING` na ausência de declaração do Founder e só pode ser `PASS` ou `REJECTED` pelo Founder. O gate de protótipo visual (`PROTOTYPE_APPROVAL`) continua obrigatório antes de implementar frontend; o gate de navegador real (`LIVE_QA_APPROVAL`) ocorre depois de implementar e integrar. Um não substitui o outro.
+
+### 10.3 Fluxo backend-first obrigatório
+
+1. O backend é implementado em worktree isolada.
+2. Testes técnicos e auditoria independente validam o backend.
+3. Após autorização, o backend pode ser integrado a `main-validation`.
+4. O frontend é implementado separadamente e auditado de forma independente, respeitando o gate de protótipo visual.
+5. Backend e frontend são integrados em `main-validation`.
+6. A aplicação completa é executada a partir do source exato de validação.
+7. O Founder conduz o QA real no navegador.
+8. Defeitos retornam à implementação, à auditoria técnica e à revalidação.
+9. Somente o estado final explicitamente aprovado pode ser promovido para `main`.
+
+### 10.4 Contrato operacional do FinanQA
+
+```text
+FINANQA_BIND=127.0.0.1
+FINANQA_PORT=5500
+FINANQA_SOURCE_BRANCH=main-validation
+FINANQA_SOURCE_SHA=EXACT_COMMIT_UNDER_QA
+FINANQA_DATABASE=ISOLATED_DISPOSABLE
+PRODUCTION_DATABASE_USE=PROHIBITED
+```
+
+O FinanQA deve executar a aplicação Django real, nunca um protótipo estático. O operador deve verificar o SHA exato, iniciar o servidor Django real, abrir o navegador no computador do Founder quando suportado, confirmar que o servidor está efetivamente ativo, verificar CSS e assets, preparar cenários sintéticos, deixar o ambiente disponível para o teste manual e relatar URLs e limitações. O operador não aprova QA. Screenshots e testes automatizados são evidência de apoio; não substituem a decisão do Founder.
+
+### 10.5 Promoção por SHA exato
+
+Antes de qualquer promoção, devem ser verificados conjuntamente: SHA aprovado no QA; HEAD remoto exato de `main-validation`; auditoria técnica independente; `FOUNDER_LIVE_QA_PASS`; `FOUNDER_PROMOTION_APPROVAL`; identidade das branches e ancestralidade do target; segurança do banco de produção; preservação dos arquivos locais do Founder; e ausência de commits não relacionados desde o QA. Qualquer mudança entre o QA e a promoção invalida o reaproveitamento automático da aprovação. O candidato alterado deve ser revisado e aprovado novamente. Não existe aprovação silenciosamente herdada, force-push como atalho ou auto-merge em `main`.
+
+Mudanças somente de governança/documentação podem ser preparadas e auditadas independentemente em `main-validation`, mas não recebem isenção automática: publicação em `main` também exige revisão/QA do Founder e autorização explícita para o SHA promovido.
+
+### 10.6 FinanQA e promoção: matriz de decisão
+
+| Estado | Ação autorizada |
+|---|---|
+| `TECHNICAL_PASS=NO` ou auditoria pendente | Parar; retornar à implementação/auditoria. |
+| `TECHNICAL_PASS=YES`, sem integração validada | Integrar ou corrigir somente em `main-validation`, com controle e auditoria. |
+| `INTEGRATION_VALIDATION_PASS=YES`, `FOUNDER_LIVE_QA=PENDING` | Disponibilizar o SHA exato no FinanQA; não promover. |
+| `FOUNDER_LIVE_QA=REJECTED` | Parar promoção; corrigir, auditar, reintegrar e revalidar novo SHA. |
+| `FOUNDER_LIVE_QA=PASS`, sem `FOUNDER_PROMOTION_APPROVAL` | Não promover; aguardar autorização explícita do Founder para o mesmo SHA. |
+| Todos os gates acima válidos para o mesmo SHA | Promover apenas pelo protocolo controlado, preservando arquivos locais e sem force-push/auto-merge. |
+
+### 10.7 Continuidade do Coordenador e parada
+
+Um Coordenador substituto deve registrar antes de agir: SHA atual de `main`; SHA atual de `main-validation`; SHA candidato exato; worktrees relevantes; estado da auditoria técnica; runtime do FinanQA e banco descartável; resultado do Founder QA; autorização de promoção; achados em aberto; bloqueadores; segurança do banco de produção; e a próxima ação autorizada. `PUBLISHED_TO_VALIDATION` significa somente publicação em `main-validation`; `PROMOTED_TO_MAIN` significa promoção autorizada e concluída em `main`. Nunca tratar o primeiro como o segundo.
+
+Parar imediatamente diante de SHA divergente, branch incorreta, aprovação sem SHA exato, mudança interveniente, QA não realizado, banco de produção usado, arquivo local do Founder ameaçado, auditoria ausente, contradição de governança ou tentativa de push/merge fora do protocolo. O Founder decide o QA e a promoção; o auditor fornece evidência; o Coordenador valida e encaminha; o `FINANPE-CHECKPOINT-SCHEDULER-012` é o único agente que escreve o checkpoint canônico em `docs/PROJECT_STATE.md`. Nenhum outro agente deve editar esse arquivo.
