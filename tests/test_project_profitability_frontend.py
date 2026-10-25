@@ -6,6 +6,7 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
+from django.contrib.staticfiles.finders import find
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -184,6 +185,57 @@ class ProjectProfitabilityFrontendTests(TestCase):
         self.assertEqual(labels[22], "Sem lucro nem prejuízo direto")
         self.assertEqual(labels[23], "Prejuízo direto")
         self.assertContains(response, "Sem lucro nem prejuízo direto")
+
+    def test_overview_applies_sem_contrato_state_precedence(self):
+        results = (
+            make_result(
+                project_id=24,
+                state="SEM_CONTRATO",
+                contract="0.00",
+                received="0.00",
+                pending="0.00",
+                direct_cost="650.00",
+                profit="-650.00",
+                margin=None,
+            ),
+            make_result(
+                project_id=25,
+                state="SEM_CONTRATO",
+                contract="0.00",
+                received="0.00",
+                pending="0.00",
+                direct_cost="0.00",
+                profit="0.00",
+                margin=None,
+            ),
+            make_result(project_id=26, profit="-100.00", margin="-0.5"),
+            make_result(
+                project_id=27,
+                state="INCONSISTENTE",
+                inconsistencies=("PAGO_SEM_DATA_PAGAMENTO",),
+                contract=None,
+                received=None,
+                pending=None,
+                direct_cost=None,
+                profit=None,
+                margin=None,
+                cash_in=None,
+                cash_out=None,
+                cash_net=None,
+                costs=None,
+            ),
+        )
+        response, _selectors = self.render_overview(results)
+        rows = {project["result"].projeto_id: project for project in response.context["projects"]}
+
+        self.assertEqual(rows[24]["outcome_label"], "Sem contrato · custos já registrados")
+        self.assertNotEqual(rows[24]["outcome_label"], "Prejuízo direto")
+        self.assertEqual(rows[25]["outcome_label"], "Sem contrato")
+        self.assertEqual(rows[26]["outcome_label"], "Prejuízo direto")
+        self.assertEqual(rows[27]["outcome_label"], "Resultado indisponível")
+        self.assertEqual(rows[27]["contracted"], "Não disponível")
+        self.assertEqual(rows[27]["direct_costs"], "Não disponível")
+        self.assertEqual(rows[27]["profit"], "Não disponível")
 
     def test_pending_payment_warning_uses_neutral_lancamento_message(self):
         result = make_result(inconsistencies=("PENDENTE_COM_DATA_PAGAMENTO",))
@@ -395,3 +447,31 @@ class ProjectProfitabilityFrontendTests(TestCase):
         self.assertIn("@media (max-width: 680px)", stylesheet)
         self.assertIn(".cost-row { min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr));", stylesheet)
         self.assertIn(".cash-list dd { white-space: normal;", stylesheet)
+
+    def test_project_profitability_css_is_discoverable(self):
+        found = find("financeiro/project_profitability.css")
+
+        self.assertIsNotNone(found)
+        self.assertEqual(Path(found).resolve(), (ROOT / "static" / "financeiro" / "project_profitability.css").resolve())
+
+    def test_central_ar_css_is_discoverable(self):
+        found = find("financeiro/central_ar.css")
+
+        self.assertIsNotNone(found)
+        self.assertEqual(Path(found).resolve(), (ROOT / "static" / "financeiro" / "central_ar.css").resolve())
+
+    def test_central_ar_javascript_is_discoverable(self):
+        found = find("financeiro/central_ar.js")
+
+        self.assertIsNotNone(found)
+        self.assertEqual(Path(found).resolve(), (ROOT / "static" / "financeiro" / "central_ar.js").resolve())
+
+    def test_templates_reference_expected_stylesheets(self):
+        overview = (ROOT / "templates" / "financeiro" / "rentabilidade_projetos.html").read_text(encoding="utf-8")
+        detail = (ROOT / "templates" / "financeiro" / "rentabilidade_projeto.html").read_text(encoding="utf-8")
+        ar = (ROOT / "templates" / "financeiro" / "central_contas_receber.html").read_text(encoding="utf-8")
+
+        self.assertIn("financeiro/project_profitability.css", overview)
+        self.assertIn("financeiro/project_profitability.css", detail)
+        self.assertIn("financeiro/central_ar.css", ar)
+        self.assertIn("financeiro/central_ar.js", ar)

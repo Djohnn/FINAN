@@ -198,10 +198,14 @@ def _profitability_row(result: RentabilidadeProjeto, customer_name: str | None) 
         "outcome_label": (
             "Resultado indisponível"
             if inconsistent
-            else "Prejuízo direto"
-            if result.lucro_direto is not None and result.lucro_direto < 0
             else "Sem contrato · custos já registrados"
             if result.estado == "SEM_CONTRATO"
+            and result.custos_diretos is not None
+            and result.custos_diretos > Decimal("0.00")
+            else "Sem contrato"
+            if result.estado == "SEM_CONTRATO"
+            else "Prejuízo direto"
+            if result.lucro_direto is not None and result.lucro_direto < 0
             else "Sem lucro nem prejuízo direto"
             if result.lucro_direto is not None and result.lucro_direto == Decimal("0.00")
             else "Resultado positivo"
