@@ -179,6 +179,27 @@ h1 {
     font-weight: 750;
 }
 
+.kanban-label-guidance {
+    display: grid;
+    gap: 4px;
+    margin: 0 0 17px;
+    padding: 11px 14px;
+    border: 1px solid var(--kanban-line);
+    border-radius: 9px;
+    border-color: #c8dfd0;
+    background: var(--kanban-green-soft);
+    color: var(--kanban-green-dark);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.kanban-label-guidance p { margin: 0; }
+
+.kanban-label-guidance__primary {
+    color: var(--kanban-green-dark);
+    font-weight: 750;
+}
+
 .kanban-board {
     display: grid;
     grid-template-columns: repeat(6, minmax(220px, 1fr));

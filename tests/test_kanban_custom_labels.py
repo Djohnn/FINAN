@@ -244,6 +244,19 @@ class KanbanCustomLabelEndpointTests(TestCase):
         self.assertContains(response, "Restaurar padrão")
         self.assertContains(response, 'name="csrfmiddlewaretoken"')
 
+    def test_board_renders_label_protection_guidance_near_customization(self):
+        response = self.client.get(reverse("kanban_projetos:kanban_readonly"))
+
+        self.assertContains(response, '<aside class="kanban-label-guidance"')
+        self.assertContains(
+            response,
+            "Você pode alterar o nome. A regra de negócio permanece protegida.",
+        )
+        self.assertContains(
+            response,
+            "Renomear a coluna não altera a etapa interna do projeto.",
+        )
+
     def test_post_reset_restores_default(self):
         salvar_label_etapa_service(
             codigo_interno="2_ORCAMENTO",
