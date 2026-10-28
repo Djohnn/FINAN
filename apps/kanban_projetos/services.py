@@ -13,6 +13,43 @@ from apps.financeiro.services import sincronizar_saldo_projeto
 from .models import ProjetoKanban
 
 
+KANBAN_LABEL_MAX_LENGTH = 100
+
+
+@transaction.atomic
+def salvar_label_etapa_service(
+    *,
+    codigo_interno: str,
+    label: str | None = None,
+    restaurar_padrao: bool = False,
+):
+    """Persiste somente o nome visual de uma identidade legada conhecida."""
+    from .models import ConfiguracaoEtapaKanban
+    from .selectors import get_kanban_stage_label
+
+    get_kanban_stage_label(codigo_interno)
+    if restaurar_padrao:
+        normalized_label = ""
+    else:
+        if not isinstance(label, str):
+            raise ValidationError("Informe um nome visível para a etapa.")
+        normalized_label = label.strip()
+        if not normalized_label:
+            raise ValidationError("Informe um nome visível para a etapa.")
+        if len(normalized_label) > KANBAN_LABEL_MAX_LENGTH:
+            raise ValidationError(
+                f"O nome visível deve ter no máximo {KANBAN_LABEL_MAX_LENGTH} caracteres."
+            )
+
+    configuration, _created = ConfiguracaoEtapaKanban.objects.select_for_update().get_or_create(
+        codigo_interno=codigo_interno,
+        defaults={"label_personalizado": normalized_label},
+    )
+    configuration.label_personalizado = normalized_label
+    configuration.save(update_fields=["label_personalizado", "atualizado_em"])
+    return configuration
+
+
 @transaction.atomic
 def aprovar_orcamento_service(
     projeto_id: int,

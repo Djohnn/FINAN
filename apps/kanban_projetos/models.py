@@ -1,5 +1,6 @@
 import re
 from decimal import Decimal, InvalidOperation
+from typing import ClassVar
 from urllib.parse import quote
 
 from django.core.exceptions import ValidationError
@@ -218,9 +219,13 @@ class ProjetoKanban(models.Model):
         """
         Retorna True se estiver na etapa '2_ORCAMENTO' e a data limite for menor ou igual a hoje.
         """
-        if self.etapa == '2_ORCAMENTO' and self.data_limite_orcamento:
-            return self.data_limite_orcamento <= timezone.localdate()
-        return False
+        from .selectors import _orcamento_vencido
+
+        return _orcamento_vencido(
+            etapa=self.etapa,
+            data_limite_orcamento=self.data_limite_orcamento,
+            data_referencia=timezone.localdate(),
+        )
 
     @property
     def is_entrega_atrasada(self) -> bool:
@@ -312,3 +317,38 @@ class ProjetoKanban(models.Model):
     def whatsapp_url(self) -> str:
         """Property wrapper para get_whatsapp_url()."""
         return self.get_whatsapp_url()
+
+
+class ConfiguracaoEtapaKanban(models.Model):
+    """Override visual persistente para uma identidade legada do Kanban."""
+
+    codigo_interno = models.CharField(
+        max_length=20,
+        unique=True,
+        verbose_name="Código interno da etapa",
+    )
+    label_personalizado = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        verbose_name="Nome visível personalizado",
+    )
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Configuração de etapa do Kanban"
+        verbose_name_plural = "Configurações de etapas do Kanban"
+        ordering: ClassVar[list[str]] = ["codigo_interno"]
+
+    def clean(self):
+        super().clean()
+        valid_codes = {code for code, _label in ProjetoKanban.ETAPA_CHOICES}
+        if self.codigo_interno not in valid_codes:
+            raise ValidationError({
+                "codigo_interno": "A identidade interna da etapa é inválida.",
+            })
+        self.label_personalizado = (self.label_personalizado or "").strip()
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
