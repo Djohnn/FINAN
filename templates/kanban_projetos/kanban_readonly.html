@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Projetos · consulta intermediária | FinanPE{% endblock %}
+
+{% block styles %}
+    <link rel="stylesheet" href="{% static 'kanban_projetos/kanban.css' %}">
+{% endblock %}
+
+{% block header_nav %}
+    <nav class="site-nav" aria-label="Navegação principal">
+        <a class="site-nav__link site-nav__link--active" href="{% url 'kanban_projetos:kanban_readonly' %}" aria-current="page">
+            Projetos
+        </a>
+        <a class="site-nav__link" href="{% url 'financeiro:central_contas_receber' %}">
+            Financeiro
+        </a>
+    </nav>
+{% endblock %}
+
+{% block content %}
+    <div class="kanban-shell">
+        <header class="kanban-heading">
+            <div>
+                <p class="eyebrow">Operação · somente leitura</p>
+                <h1>Projetos em acompanhamento</h1>
+                <p class="kanban-heading__copy">
+                    Consulta intermediária do fluxo legado. Esta tela não movimenta, edita ou salva projetos.
+                </p>
+            </div>
+            <div class="kanban-version" role="note">
+                <span class="kanban-version__dot" aria-hidden="true"></span>
+                <span>Versão intermediária de consulta</span>
+            </div>
+        </header>
+
+        {% if messages %}
+            <div class="kanban-feedback" role="status" aria-live="polite">
+                {% for message in messages %}
+                    <span>{{ message }}</span>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if stage_editor.error %}
+            <div class="kanban-feedback kanban-feedback--error" role="alert" aria-live="assertive">
+                {{ stage_editor.error }}
+            </div>
+        {% endif %}
+
+        {% if not orcamentos_atrasados_count %}
+            <div class="kanban-status kanban-status--ok" role="status" aria-live="polite">
+                <span class="kanban-status__icon" aria-hidden="true">✓</span>
+                <span>Nenhum orçamento vencido. Os prazos estão em dia.</span>
+            </div>
+        {% endif %}
+
+        <section class="kanban-section" aria-labelledby="kanban-legado-title">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Fluxo existente no banco</p>
+                    <h2 id="kanban-legado-title">Etapas legadas</h2>
+                </div>
+                <span class="section-heading__meta">{{ columns|length }} etapas</span>
+            </div>
+
+            <div class="kanban-board" role="list" aria-label="Projetos por etapa legada">
+                {% for column in columns %}
+                    <section class="kanban-column" role="listitem" aria-labelledby="column-{{ column.code }}">
+                        <header class="kanban-column__header">
+                            <div>
+                                <div class="kanban-column__title-row">
+                                    <h3 id="column-{{ column.code }}">{{ column.label }}</h3>
+                                    <button
+                                        class="kanban-stage-edit"
+                                        type="button"
+                                        data-stage-edit
+                                        aria-controls="stage-editor-{{ column.code }}"
+                                        aria-expanded="false"
+                                        aria-label="Renomear etapa {{ column.label }}"
+                                    >
+                                        ✎
+                                    </button>
+                                </div>
+                                <form
+                                    id="stage-editor-{{ column.code }}"
+                                    class="stage-label-editor{% if stage_editor.code == column.code %} stage-label-editor--open{% endif %}"
+                                    method="post"
+                                    action="{% url 'kanban_projetos:stage_label_update' codigo_interno=column.code %}"
+                                    {% if stage_editor.code != column.code %}hidden{% endif %}
+                                >
+                                    {% csrf_token %}
+                                    <label for="stage-label-{{ column.code }}">Nome visível</label>
+                                    <input
+                                        id="stage-label-{{ column.code }}"
+                                        name="label"
+                                        type="text"
+                                        maxlength="100"
+                                        value="{% if stage_editor.code == column.code %}{{ stage_editor.value }}{% else %}{{ column.label }}{% endif %}"
+                                        autocomplete="off"
+                                    >
+                                    {% if stage_editor.code == column.code and stage_editor.error %}
+                                        <p class="stage-label-editor__error" role="alert">{{ stage_editor.error }}</p>
+                                    {% endif %}
+                                    <div class="stage-label-editor__actions">
+                                        <button class="button button--primary" type="submit">Salvar</button>
+                                        <button class="button button--secondary" type="submit" name="reset" value="1">Restaurar padrão</button>
+                                        <button class="button button--quiet" type="button" data-stage-cancel>Cancelar</button>
+                                    </div>
+                                </form>
+                            </div>
+                            <span class="kanban-column__count" aria-label="{{ column.projects|length }} projeto(s)">
+                                {{ column.projects|length }}
+                            </span>
+                        </header>
+                        <div class="kanban-column__body">
+                            {% for card in column.projects %}
+                                {% with project=card.project %}
+                                    <article
+                                        class="kanban-card{% if card.is_overdue %} kanban-card--overdue{% endif %}"
+                                        data-project-id="{{ project.pk }}"
+                                    >
+                                        <div class="kanban-card__topline">
+                                            <span class="kanban-card__stage">{{ card.stage_label }}</span>
+                                            {% if card.is_overdue %}
+                                                <span class="kanban-card__alert" role="status">Orçamento vencido</span>
+                                            {% endif %}
+                                        </div>
+                                        <h4>{{ project.titulo_servico }}</h4>
+                                        <p class="kanban-card__client">{{ project.cliente.nome }}</p>
+                                        <dl class="kanban-card__details">
+                                            {% if project.data_limite_orcamento %}
+                                                <div>
+                                                    <dt>Prazo do orçamento</dt>
+                                                    <dd>{{ project.data_limite_orcamento|date:"d/m/Y" }}</dd>
+                                                </div>
+                                            {% endif %}
+                                            {% if project.data_entrega_prevista %}
+                                                <div>
+                                                    <dt>Prazo de entrega</dt>
+                                                    <dd>{{ project.data_entrega_prevista|date:"d/m/Y" }}</dd>
+                                                </div>
+                                            {% endif %}
+                                            {% if project.valor_total %}
+                                                <div>
+                                                    <dt>Valor do projeto</dt>
+                                                    <dd>R$ {{ project.valor_total }}</dd>
+                                                </div>
+                                            {% endif %}
+                                        </dl>
+                                        {% if card.is_overdue %}
+                                            <p class="kanban-card__overdue-copy">O prazo do orçamento venceu. Consulte o prazo acima.</p>
+                                        {% endif %}
+                                    </article>
+                                {% endwith %}
+                            {% empty %}
+                                <p class="kanban-empty">Nenhum projeto nesta etapa.</p>
+                            {% endfor %}
+                        </div>
+                    </section>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="kanban-section kanban-section--archive" aria-labelledby="kanban-geladeira-title">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Fora do quadro principal</p>
+                    <div class="kanban-column__title-row">
+                        <h2 id="kanban-geladeira-title">{{ archived_column.label }}</h2>
+                        <button
+                            class="kanban-stage-edit"
+                            type="button"
+                            data-stage-edit
+                            aria-controls="stage-editor-{{ archived_column.code }}"
+                            aria-expanded="false"
+                            aria-label="Renomear etapa {{ archived_column.label }}"
+                        >
+                            ✎
+                        </button>
+                    </div>
+                    <form
+                        id="stage-editor-{{ archived_column.code }}"
+                        class="stage-label-editor{% if stage_editor.code == archived_column.code %} stage-label-editor--open{% endif %}"
+                        method="post"
+                        action="{% url 'kanban_projetos:stage_label_update' codigo_interno=archived_column.code %}"
+                        {% if stage_editor.code != archived_column.code %}hidden{% endif %}
+                    >
+                        {% csrf_token %}
+                        <label for="stage-label-{{ archived_column.code }}">Nome visível</label>
+                        <input
+                            id="stage-label-{{ archived_column.code }}"
+                            name="label"
+                            type="text"
+                            maxlength="100"
+                            value="{% if stage_editor.code == archived_column.code %}{{ stage_editor.value }}{% else %}{{ archived_column.label }}{% endif %}"
+                            autocomplete="off"
+                        >
+                        {% if stage_editor.code == archived_column.code and stage_editor.error %}
+                            <p class="stage-label-editor__error" role="alert">{{ stage_editor.error }}</p>
+                        {% endif %}
+                        <div class="stage-label-editor__actions">
+                            <button class="button button--primary" type="submit">Salvar</button>
+                            <button class="button button--secondary" type="submit" name="reset" value="1">Restaurar padrão</button>
+                            <button class="button button--quiet" type="button" data-stage-cancel>Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+                <span class="section-heading__meta">{{ archived_count }} projeto(s)</span>
+            </div>
+            <div class="archive-grid" role="list" aria-label="Projetos arquivados">
+                {% for card in archived_column.projects %}
+                    {% with project=card.project %}
+                        <article class="kanban-card kanban-card--archived" role="listitem" data-project-id="{{ project.pk }}">
+                            <div class="kanban-card__topline">
+                                <span class="kanban-card__stage">{{ card.stage_label }}</span>
+                                <span class="kanban-card__archive-label">Arquivado</span>
+                            </div>
+                            <h3>{{ project.titulo_servico }}</h3>
+                            <p class="kanban-card__client">{{ project.cliente.nome }}</p>
+                            {% if project.valor_total %}
+                                <p class="kanban-card__archive-value">R$ {{ project.valor_total }}</p>
+                            {% endif %}
+                        </article>
+                    {% endwith %}
+                {% empty %}
+                    <p class="kanban-empty kanban-empty--archive">A Geladeira está vazia.</p>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        (() => {
+            const closeEditor = (button) => {
+                const form = button.closest('.stage-label-editor');
+                if (!form) return;
+                form.hidden = true;
+                const trigger = document.querySelector(`[aria-controls="${form.id}"]`);
+                if (trigger) trigger.setAttribute('aria-expanded', 'false');
+            };
+
+            document.querySelectorAll('[data-stage-edit]').forEach((trigger) => {
+                trigger.addEventListener('click', () => {
+                    const form = document.getElementById(trigger.getAttribute('aria-controls'));
+                    if (!form) return;
+                    form.hidden = false;
+                    trigger.setAttribute('aria-expanded', 'true');
+                    const input = form.querySelector('input[name="label"]');
+                    if (input) input.focus();
+                });
+            });
+
+            document.querySelectorAll('[data-stage-cancel]').forEach((button) => {
+                button.addEventListener('click', () => closeEditor(button));
+            });
+        })();
+    </script>
+{% endblock %}

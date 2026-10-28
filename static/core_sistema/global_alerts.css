@@ -1,0 +1,29 @@
+.global-budget-alert {
+    align-items: center;
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    border-radius: 0.75rem;
+    color: #991b1b;
+    display: flex;
+    gap: 0.75rem;
+    margin: 1rem auto;
+    max-width: 72rem;
+    padding: 0.875rem 1rem;
+}
+
+.global-budget-alert__icon {
+    align-items: center;
+    background: #b91c1c;
+    border-radius: 999px;
+    color: #fff;
+    display: inline-flex;
+    flex: 0 0 1.5rem;
+    font-weight: 700;
+    height: 1.5rem;
+    justify-content: center;
+    width: 1.5rem;
+}
+
+.global-budget-alert__message {
+    margin: 0;
+}

@@ -21,6 +21,7 @@ from django.urls import include, path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('projetos/', include('apps.kanban_projetos.urls')),
     path('financeiro/', include('apps.financeiro.urls')),
 ]
 

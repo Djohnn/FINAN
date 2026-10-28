@@ -5,6 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}FinanPE{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'core_sistema/global_alerts.css' %}">
     {% block styles %}{% endblock %}
 </head>
 <body class="app-body">
@@ -18,6 +19,25 @@
             {% block header_nav %}{% endblock %}
         </div>
     </header>
+    {% if orcamentos_atrasados_count %}
+        <div
+            class="global-budget-alert"
+            role="alert"
+            aria-live="polite"
+            aria-atomic="true"
+        >
+            <span class="global-budget-alert__icon" aria-hidden="true">!</span>
+            <p class="global-budget-alert__message">
+                {% if orcamentos_atrasados_count == 1 %}
+                    <strong>{{ orcamentos_atrasados_count }} orçamento vencido.</strong>
+                    Revise o prazo e entre em contato com o cliente.
+                {% else %}
+                    <strong>{{ orcamentos_atrasados_count }} orçamentos vencidos.</strong>
+                    Revise os prazos e entre em contato com os clientes.
+                {% endif %}
+            </p>
+        </div>
+    {% endif %}
     <main id="conteudo-principal">
         {% block content %}{% endblock %}
     </main>

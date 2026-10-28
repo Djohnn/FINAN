@@ -1,7 +1,7 @@
 from django.utils import timezone
 
 from apps.clientes_agenda.models import AgendaContato
-from apps.kanban_projetos.models import ProjetoKanban
+from apps.kanban_projetos.selectors import orcamentos_vencidos
 
 from .models import ConfiguracaoSistema
 from .services import backup_realizado_hoje
@@ -10,10 +10,9 @@ from .services import backup_realizado_hoje
 def alertas_globais(request):
     """Expõe alertas sem executar operações de disco durante uma requisição."""
     hoje = timezone.localdate()
-    orcamentos_atrasados = list(ProjetoKanban.objects.filter(
-        etapa='2_ORCAMENTO',
-        data_limite_orcamento__lte=hoje,
-    ).select_related('cliente'))
+    orcamentos_atrasados = list(
+        orcamentos_vencidos(data_referencia=hoje).select_related('cliente')
+    )
     contatos_pendentes = list(AgendaContato.objects.filter(
         tipo__in=('POS_VENDA_30_DIAS', 'RETORNO_ORCAMENTO', 'LIGACAO_MANUAL'),
         realizado=False,
