@@ -64,6 +64,15 @@
                 <span class="section-heading__meta">{{ columns|length }} etapas</span>
             </div>
 
+            <aside class="kanban-label-guidance" aria-label="Sobre a personalização das colunas">
+                <p class="kanban-label-guidance__primary">
+                    Você pode alterar o nome. A regra de negócio permanece protegida.
+                </p>
+                <p class="kanban-label-guidance__secondary">
+                    Renomear a coluna não altera a etapa interna do projeto.
+                </p>
+            </aside>
+
             <div class="kanban-board" role="list" aria-label="Projetos por etapa legada">
                 {% for column in columns %}
                     <section class="kanban-column" role="listitem" aria-labelledby="column-{{ column.code }}">
