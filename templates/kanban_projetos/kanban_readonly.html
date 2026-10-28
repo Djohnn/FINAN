@@ -73,6 +73,12 @@
                 </p>
             </aside>
 
+            <form class="kanban-order-reset" method="post" action="{% url 'kanban_projetos:stage_order_update' %}">
+                {% csrf_token %}
+                <p>Use as setas para organizar as colunas. A etapa dos projetos permanece igual.</p>
+                <button class="button button--secondary" type="submit" name="reset" value="1">Restaurar ordem padrão</button>
+            </form>
+
             <div class="kanban-board" role="list" aria-label="Projetos por etapa legada">
                 {% for column in columns %}
                     <section class="kanban-column" role="listitem" aria-labelledby="column-{{ column.code }}">
@@ -122,6 +128,22 @@
                                 {{ column.projects|length }}
                             </span>
                         </header>
+                        <div class="kanban-order-controls" role="group" aria-label="Ordenar etapa {{ column.label }}">
+                            <form method="post" action="{% url 'kanban_projetos:stage_order_update' %}">
+                                {% csrf_token %}
+                                {% for code in column.order_before %}<input type="hidden" name="ordem" value="{{ code }}">{% endfor %}
+                                <button class="button button--quiet" type="submit" aria-label="Mover {{ column.label }} para antes" {% if not column.order_before %}disabled{% endif %}>
+                                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="m14 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'kanban_projetos:stage_order_update' %}">
+                                {% csrf_token %}
+                                {% for code in column.order_after %}<input type="hidden" name="ordem" value="{{ code }}">{% endfor %}
+                                <button class="button button--quiet" type="submit" aria-label="Mover {{ column.label }} para depois" {% if not column.order_after %}disabled{% endif %}>
+                                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="m10 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                                </button>
+                            </form>
+                        </div>
                         <div class="kanban-column__body">
                             {% for card in column.projects %}
                                 {% with project=card.project %}

@@ -521,3 +521,19 @@ button:focus-visible {
     .kanban-board { grid-template-columns: minmax(0, 1fr); }
     .section-heading { align-items: flex-start; flex-direction: column; gap: 8px; }
 }
+
+
+.kanban-order-reset {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.kanban-order-reset button { min-height: 44px; }
+.kanban-order-reset p { margin: 0; color: var(--kanban-muted); }
+.kanban-order-controls { display: flex; gap: 6px; padding: 0 14px 10px; }
+.kanban-order-controls button { display: grid; place-items: center; min-width: 44px; min-height: 44px; }
+.kanban-order-controls button:disabled { opacity: 0.45; cursor: default; }

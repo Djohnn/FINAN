@@ -1,11 +1,12 @@
 from datetime import date
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.utils.functional import SimpleLazyObject
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
@@ -16,7 +17,7 @@ from .selectors import (
     get_kanban_stage_defaults,
     get_kanban_stage_labels,
 )
-from .services import salvar_label_etapa_service
+from .services import salvar_label_etapa_service, salvar_ordem_etapas_service
 
 
 class _StageLabelResolver:
@@ -33,6 +34,22 @@ class _StageLabelResolver:
                 for stage in get_kanban_stage_labels()
             }
         return self._resolved.get(codigo_interno, self._defaults[codigo_interno])
+
+    def order_columns(self, columns):
+        self.resolve(ARCHIVED_STAGE_CODE)
+        by_code = {column["code"]: column for column in columns}
+        ordered = [by_code[code] for code in self._resolved if code in by_code]
+        codes = [column["code"] for column in ordered]
+        for index, column in enumerate(ordered):
+            for direction, offset in (("order_before", -1), ("order_after", 1)):
+                target = index + offset
+                permutation = codes.copy()
+                if 0 <= target < len(codes):
+                    permutation[index], permutation[target] = permutation[target], permutation[index]
+                    column[direction] = permutation
+                else:
+                    column[direction] = []
+        return tuple(ordered)
 
 
 class _StageLabelProxy:
@@ -74,6 +91,8 @@ class _KanbanColumnContext(TypedDict):
     code: str
     label: _StageLabelProxy
     default_label: str
+    order_before: NotRequired[list[str]]
+    order_after: NotRequired[list[str]]
     projects: tuple[_KanbanCardContext, ...]
 
 
@@ -145,7 +164,7 @@ def _kanban_context(
         "projects": tuple(archived_projects),
     }
     return {
-        "columns": columns,
+        "columns": SimpleLazyObject(lambda: stage_resolver.order_columns(columns)),
         "archived_column": archived_column,
         "column_counts": {
             column["code"]: len(column["projects"]) for column in columns
@@ -198,4 +217,20 @@ def stage_label_update(request: HttpRequest, codigo_interno: str) -> HttpRespons
         )
 
     messages.success(request, "Nome visível da etapa salvo.")
+    return redirect("kanban_projetos:kanban_readonly")
+
+
+@require_POST
+@csrf_protect
+def stage_order_update(request: HttpRequest) -> HttpResponse:
+    """Change only visual order; accept a complete server-validated permutation."""
+    try:
+        salvar_ordem_etapas_service(
+            codigos=request.POST.getlist("ordem"),
+            restaurar_padrao=request.POST.get("reset") == "1",
+        )
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+        return render(request, "kanban_projetos/kanban_readonly.html", _kanban_context(), status=400)
+    messages.success(request, "Ordem das etapas salva.")
     return redirect("kanban_projetos:kanban_readonly")

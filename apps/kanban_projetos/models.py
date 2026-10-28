@@ -333,6 +333,7 @@ class ConfiguracaoEtapaKanban(models.Model):
         default="",
         verbose_name="Nome visível personalizado",
     )
+    posicao_visual = models.PositiveSmallIntegerField(null=True, blank=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
     class Meta:
