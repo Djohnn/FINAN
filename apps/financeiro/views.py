@@ -68,6 +68,12 @@ PROFITABILITY_STATE_LABELS = {
     "SEM_CONTRATO": ("Sem contrato", "state-tag--no-contract"),
     "INCONSISTENTE": ("Inconsistente", "state-tag--inconsistent"),
 }
+PROFITABILITY_STATE_OPTIONS = (
+    ("", "Todos"),
+    ("DISPONIVEL", "Disponível"),
+    ("SEM_CONTRATO", "Sem contrato"),
+    ("INCONSISTENTE", "Inconsistente"),
+)
 PROFITABILITY_CATEGORY_LABELS = {
     "MATERIA_PRIMA": "Matéria-prima",
     "FUNCIONARIO": "Funcionário",
@@ -161,7 +167,7 @@ def _profitability_notice(result: RentabilidadeProjeto) -> tuple[str, str, str, 
         return (
             "negative",
             "−",
-            "Este projeto está com prejuízo direto",
+            "Resultado negativo",
             (
                 "Os custos diretamente ligados ao projeto estão acima do valor contratado. "
                 "A margem negativa aparece sem esconder o resultado."
@@ -182,6 +188,7 @@ def _profitability_row(result: RentabilidadeProjeto, customer_name: str | None) 
     state_label, state_class = PROFITABILITY_STATE_LABELS[result.estado]
     notice_class, _mark, _title, _copy = _profitability_notice(result)
     inconsistent = result.estado == "INCONSISTENTE"
+    no_contract = result.estado == "SEM_CONTRATO"
     return {
         "result": result,
         "customer_name": customer_name or "Cliente não disponível",
@@ -194,9 +201,13 @@ def _profitability_row(result: RentabilidadeProjeto, customer_name: str | None) 
         "warning_codes": result.inconsistencias,
         "contracted": _profitability_money(result.valor_contratado),
         "direct_costs": _profitability_money(result.custos_diretos),
-        "profit": _profitability_money(result.lucro_direto),
-        "margin": _profitability_percent(result.margem_direta_percentual),
-        "profit_negative": result.lucro_direto is not None and result.lucro_direto < 0,
+        "profit": "Não calculado sem contrato" if no_contract else _profitability_money(result.lucro_direto),
+        "margin": "—" if no_contract else _profitability_percent(result.margem_direta_percentual),
+        "received": _profitability_money(result.valor_recebido),
+        "remaining": _profitability_money(result.saldo_a_receber),
+        "cash_net": _profitability_money(result.caixa_liquido_realizado),
+        "profit_negative": result.lucro_direto is not None and result.lucro_direto < 0 and not no_contract,
+        "negative_badge": "Atenção · prejuízo" if result.lucro_direto is not None and result.lucro_direto < 0 and not no_contract else "",
         "notice_class": notice_class,
         "outcome_label": (
             "Resultado indisponível"
@@ -207,7 +218,7 @@ def _profitability_row(result: RentabilidadeProjeto, customer_name: str | None) 
             and result.custos_diretos > Decimal("0.00")
             else "Sem contrato"
             if result.estado == "SEM_CONTRATO"
-            else "Prejuízo direto"
+            else "Resultado negativo"
             if result.lucro_direto is not None and result.lucro_direto < 0
             else "Sem lucro nem prejuízo direto"
             if result.lucro_direto is not None and result.lucro_direto == Decimal("0.00")
@@ -249,6 +260,19 @@ def _profitability_detail_context(result: RentabilidadeProjeto, customer_name: s
         }
     )
     return row
+
+
+def _filter_profitability_rows(
+    rows: tuple[dict, ...], *, query: str, stage: str, state: str
+) -> tuple[dict, ...]:
+    normalized_query = query.casefold()
+    return tuple(
+        row
+        for row in rows
+        if (not normalized_query or normalized_query in row["result"].titulo_servico.casefold() or normalized_query in row["customer_name"].casefold())
+        and (not stage or row["result"].etapa == stage)
+        and (not state or row["result"].estado == state)
+    )
 
 
 def _date(value) -> str:
@@ -465,16 +489,33 @@ def rentabilidade_projetos_view(request):
             status=500,
         )
 
-    projects = tuple(
+    all_projects = tuple(
         _profitability_row(result, customer_names.get(result.projeto_id))
         for result in portfolio.projetos
     )
+    query = request.GET.get("q", "").strip()
+    stage = request.GET.get("etapa", "")
+    state = request.GET.get("estado", "")
+    valid_stages = set(PROFITABILITY_STAGE_LABELS)
+    valid_states = {value for value, _label in PROFITABILITY_STATE_OPTIONS if value}
+    if stage not in valid_stages:
+        stage = ""
+    if state not in valid_states:
+        state = ""
+    projects = _filter_profitability_rows(all_projects, query=query, stage=stage, state=state)
     return render(
         request,
         "financeiro/rentabilidade_projetos.html",
         {
             "available": True,
             "projects": projects,
+            "total_projects": len(all_projects),
+            "filtered_projects": len(projects),
+            "query": query,
+            "selected_stage": stage,
+            "selected_state": state,
+            "stage_options": tuple(PROFITABILITY_STAGE_LABELS.items()),
+            "state_options": PROFITABILITY_STATE_OPTIONS,
             "has_projects": bool(projects),
         },
     )

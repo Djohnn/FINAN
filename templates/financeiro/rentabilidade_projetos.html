@@ -20,7 +20,7 @@
         <div class="page-intro__copy">
             <p class="section-label">Financeiro · leitura atual</p>
             <h1 id="page-title">Rentabilidade por projeto</h1>
-            <p class="page-intro__lead">Veja, em linguagem simples, quais trabalhos geram resultado direto e quais precisam de atenção.</p>
+            <p class="page-intro__lead">Veja rapidamente se cada serviço está dando dinheiro ou prejuízo, sem esconder os detalhes que explicam o resultado.</p>
         </div>
         <div class="read-only-note">
             <span class="read-only-note__icon" aria-hidden="true">i</span>
@@ -51,8 +51,29 @@
                     <h2 id="projects-title">Todos os projetos</h2>
                     <p>Nenhum projeto desaparece por estar sem contrato ou sem movimentação financeira.</p>
                 </div>
-                <span class="section-heading__meta">Estados do read model</span>
+                <span class="section-heading__meta">{{ filtered_projects }} de {{ total_projects }} projetos exibidos</span>
             </div>
+
+            <form class="profitability-filters" method="get" aria-label="Filtrar rentabilidade por projeto">
+                <div class="filter-field">
+                    <label for="profitability-query">Projeto ou cliente</label>
+                    <input id="profitability-query" name="q" type="search" value="{{ query }}" placeholder="Buscar projeto ou cliente">
+                </div>
+                <div class="filter-field">
+                    <label for="profitability-stage">Etapa</label>
+                    <select id="profitability-stage" name="etapa">
+                        <option value="">Todas as etapas</option>
+                        {% for value, label in stage_options %}<option value="{{ value }}"{% if selected_stage == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="filter-field">
+                    <label for="profitability-state">Estado</label>
+                    <select id="profitability-state" name="estado">
+                        {% for value, label in state_options %}<option value="{{ value }}"{% if selected_state == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                </div>
+                <button class="filter-submit" type="submit">Aplicar filtros</button>
+            </form>
 
             {% if has_projects %}
                 <div class="project-list">
@@ -74,7 +95,8 @@
                                     <div class="inconsistent-summary" role="status">
                                         <span class="inconsistent-summary__symbol" aria-hidden="true">!</span>
                                         <div>
-                                            <p>Há uma inconsistência no read model. Os valores não são exibidos para evitar um resultado parcial.</p>
+                                            <p><strong>Dados financeiros inconsistentes</strong></p>
+                                            <p>Abra o detalhe para ver os avisos. Números ocultos.</p>
                                             {% for message in project.warning_messages %}<p class="integrity-message">{{ message }}</p>{% endfor %}
                                         </div>
                                     </div>
@@ -96,11 +118,26 @@
                                             <span>Margem direta</span>
                                             <strong>{{ project.margin }}</strong>
                                         </div>
+                                        <div class="project-metric project-metric--secondary">
+                                            <span>Valor recebido</span>
+                                            <strong>{{ project.received }}</strong>
+                                        </div>
+                                        <div class="project-metric project-metric--secondary">
+                                            <span>Saldo a receber</span>
+                                            <strong>{{ project.remaining }}</strong>
+                                        </div>
+                                        <div class="project-metric project-metric--secondary">
+                                            <span>Caixa líquido realizado</span>
+                                            <strong>{{ project.cash_net }}</strong>
+                                        </div>
                                     </div>
                                 {% endif %}
                             </div>
                             <div class="project-row__action">
-                                <span class="outcome-label outcome-label--{{ project.notice_class }}">{{ project.outcome_label }}</span>
+                                <div>
+                                    <span class="outcome-label outcome-label--{{ project.notice_class }}">{{ project.outcome_label }}</span>
+                                    {% if project.negative_badge %}<span class="negative-badge">{{ project.negative_badge }}</span>{% endif %}
+                                </div>
                                 <a class="text-action" href="{% url 'financeiro:rentabilidade_projeto' projeto_id=project.result.projeto_id %}">Abrir detalhe <span aria-hidden="true">↗</span></a>
                             </div>
                         </article>
