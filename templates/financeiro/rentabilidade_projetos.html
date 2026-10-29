@@ -102,14 +102,6 @@
                                     </div>
                                 {% else %}
                                     <div class="project-metrics">
-                                        <div class="project-metric">
-                                            <span>Valor contratado</span>
-                                            <strong>{{ project.contracted }}</strong>
-                                        </div>
-                                        <div class="project-metric">
-                                            <span>Custos diretos</span>
-                                            <strong>{{ project.direct_costs }}</strong>
-                                        </div>
                                         <div class="project-metric{% if project.profit_negative %} project-metric--negative{% else %} project-metric--positive{% endif %}">
                                             <span>Lucro direto</span>
                                             <strong>{{ project.profit }}</strong>
@@ -118,13 +110,21 @@
                                             <span>Margem direta</span>
                                             <strong>{{ project.margin }}</strong>
                                         </div>
-                                        <div class="project-metric project-metric--secondary">
-                                            <span>Valor recebido</span>
-                                            <strong>{{ project.received }}</strong>
+                                        <div class="project-metric">
+                                            <span>Custos diretos</span>
+                                            <strong>{{ project.direct_costs }}</strong>
+                                        </div>
+                                        <div class="project-metric">
+                                            <span>Valor contratado</span>
+                                            <strong>{{ project.contracted }}</strong>
                                         </div>
                                         <div class="project-metric project-metric--secondary">
                                             <span>Saldo a receber</span>
                                             <strong>{{ project.remaining }}</strong>
+                                        </div>
+                                        <div class="project-metric project-metric--secondary">
+                                            <span>Valor recebido</span>
+                                            <strong>{{ project.received }}</strong>
                                         </div>
                                         <div class="project-metric project-metric--secondary">
                                             <span>Caixa líquido realizado</span>
@@ -143,7 +143,7 @@
                         </article>
                     {% endfor %}
                 </div>
-            {% else %}
+            {% elif total_projects == 0 %}
                 <section class="empty-state empty-state--large" aria-labelledby="empty-title">
                     <div class="empty-state__illustration" aria-hidden="true">
                         <span></span><span class="empty-state__line--short"></span><span></span>
@@ -152,6 +152,17 @@
                         <p class="section-label">Nenhum projeto cadastrado</p>
                         <h2 id="empty-title">Quando ainda não houver projetos</h2>
                         <p>Esta área mostrará os projetos assim que eles forem cadastrados. Projetos sem contrato continuam visíveis na lista.</p>
+                    </div>
+                </section>
+            {% else %}
+                <section class="empty-state empty-state--large" aria-labelledby="empty-title">
+                    <div class="empty-state__illustration" aria-hidden="true">
+                        <span></span><span class="empty-state__line--short"></span><span></span>
+                    </div>
+                    <div>
+                        <p class="section-label">Nenhum projeto encontrado</p>
+                        <h2 id="empty-title">Ajuste os filtros para ver outros projetos.</h2>
+                        <p>O portfólio tem projetos, mas nenhum corresponde aos filtros atuais.</p>
                     </div>
                 </section>
             {% endif %}

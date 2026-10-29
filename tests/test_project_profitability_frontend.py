@@ -153,6 +153,23 @@ class ProjectProfitabilityFrontendTests(TestCase):
         self.assertContains(response, "R$ 7.500,00")
         self.assertContains(response, "R$ 4.800,00")
 
+    def test_overview_metrics_follow_approved_visual_hierarchy(self):
+        response, _selectors = self.render_overview((make_result(),))
+        content = response.content.decode()
+        metrics_start = content.index('<div class="project-metrics">')
+
+        labels = (
+            "Lucro direto",
+            "Margem direta",
+            "Custos diretos",
+            "Valor contratado",
+            "Saldo a receber",
+            "Valor recebido",
+            "Caixa líquido realizado",
+        )
+        positions = tuple(content.index(label, metrics_start) for label in labels)
+        self.assertEqual(positions, tuple(sorted(positions)))
+
     def test_named_detail_route_renders_read_only_screen(self):
         response, _selector = self.render_detail(make_result())
 
@@ -433,8 +450,21 @@ class ProjectProfitabilityFrontendTests(TestCase):
         response, _selectors = self.render_overview(())
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Nenhum projeto cadastrado")
         self.assertContains(response, "Quando ainda não houver projetos")
         self.assertContains(response, "Projetos sem contrato continuam visíveis")
+
+    def test_filtered_overview_has_distinct_empty_state_when_portfolio_exists(self):
+        result = make_result(title="Projeto existente")
+        with patch("apps.financeiro.views.rentabilidade_projetos", return_value=ProjetosRentabilidade((result,))), patch(
+            "apps.financeiro.views.rentabilidade_clientes", return_value={result.projeto_id: "Cliente Real"}
+        ):
+            response = self.client.get(self.overview_url, {"q": "não encontrado"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Nenhum projeto encontrado")
+        self.assertContains(response, "Ajuste os filtros para ver outros projetos.")
+        self.assertNotContains(response, "Nenhum projeto cadastrado")
 
     def test_xss_content_is_escaped_by_template(self):
         result = make_result(title="<script>alert('x')</script>")
