@@ -86,6 +86,7 @@
 .customer-tabs a { align-items: center; color: var(--customer-green-deep); display: inline-flex; font-size: .84rem; font-weight: 800; min-height: 44px; text-decoration: none; white-space: nowrap; }
 .customer-tabs a:hover, .customer-tabs a:focus-visible { text-decoration: underline; }
 .customer-columns { align-items: start; display: grid; gap: 28px; grid-template-columns: minmax(0, 1.45fr) minmax(300px, .9fr); }
+.customer-main-column { min-width: 0; }
 .customer-section { margin-bottom: 30px; }
 .project-list { display: grid; gap: 12px; }
 .project-card { padding: 23px; scroll-margin-top: 20px; }
@@ -133,7 +134,10 @@
     .customer-page-heading, .customer-hero__heading { display: grid; }
     .customer-index-summary { align-items: start; flex-direction: column; gap: 6px; }
     .customer-hero { padding: 22px 18px 0; }
-    .customer-hero__facts, .financial-summary, .customer-columns { grid-template-columns: 1fr; }
+    .customer-hero__facts, .financial-summary, .customer-columns { grid-template-columns: minmax(0, 1fr); }
+    .project-card { min-width: 0; }
+    .project-card__heading { flex-wrap: wrap; }
+    .stage-badge { overflow-wrap: anywhere; white-space: normal; }
     .financial-summary { overflow: visible; }
     .financial-summary__item, .financial-summary__item:first-child, .financial-summary__item:last-child { border-radius: 0; margin: -1px 0 0; }
     .financial-summary__item:first-child { border-radius: var(--customer-radius) var(--customer-radius) 0 0; margin-top: 0; }
