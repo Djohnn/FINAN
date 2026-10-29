@@ -14,7 +14,6 @@ from apps.kanban_projetos.models import ProjetoKanban
 
 from .models import AgendaContato, Cliente
 
-
 HistoryState = Literal["DISPONIVEL", "INCONSISTENTE", "SEM_CONTRATO"]
 
 _HISTORY_PAGE_SIZE = 50
@@ -69,6 +68,10 @@ _WARNING_LABELS = {
 
 class Cliente360NotFound(ValueError):
     """Raised when a requested customer cannot be resolved by primary key."""
+
+
+class InvalidHistoryPage(ValueError):
+    """Raised when a history continuation page is outside the input contract."""
 
 
 @dataclass(frozen=True)
@@ -183,15 +186,15 @@ def _validate_reference_date(data_referencia: date) -> date:
 
 def _validate_query(query: str) -> str:
     if not isinstance(query, str):
-        raise ValueError("query deve ser texto.")
+        raise TypeError("query deve ser texto.")
     return query.strip()
 
 
 def _validate_history_page(history_page: int) -> int:
     if isinstance(history_page, bool) or not isinstance(history_page, int) or history_page <= 0:
-        raise ValueError("history_page deve ser um inteiro positivo.")
+        raise InvalidHistoryPage("history_page deve ser um inteiro positivo.")
     if history_page > 1000:
-        raise ValueError("history_page excede o limite permitido.")
+        raise InvalidHistoryPage("history_page excede o limite permitido.")
     return history_page
 
 

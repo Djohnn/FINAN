@@ -10,11 +10,10 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from apps.clientes_agenda.models import AgendaContato, Cliente
-from apps.clientes_agenda.selectors import clientes_index, cliente_360
+from apps.clientes_agenda.selectors import cliente_360, clientes_index
 from apps.core_sistema.models import EventoSistema
 from apps.financeiro.models import LancamentoFinanceiro
 from apps.kanban_projetos.models import ProjetoKanban
-
 
 D = Decimal
 REFERENCE = date(2026, 10, 29)
@@ -247,7 +246,7 @@ class Customer360SelectorTests(Customer360FixturesMixin, TestCase):
 
     def test_contract_without_ledger_shows_divergence_warning(self):
         customer = self.make_customer()
-        project = self.make_project(customer, contract="500.00")
+        self.make_project(customer, contract="500.00")
 
         result = cliente_360(cliente_id=customer.pk, data_referencia=REFERENCE)
 
@@ -470,6 +469,48 @@ class Customer360FrontendTests(Customer360FixturesMixin, TestCase):
         self.assertContains(response, "Projeto finalizado")
         self.assertLessEqual(response.content.decode().count("data-history-event"), 50)
 
+    def test_history_page_missing_defaults_to_first_page(self):
+        customer = self.make_customer()
+        response = self.client.get(reverse("clientes_agenda:cliente_history", kwargs={"cliente_id": customer.pk}))
+        self.assertEqual(response.status_code, 200)
+
+    def test_history_page_one_is_valid(self):
+        customer = self.make_customer()
+        response = self.client.get(
+            reverse("clientes_agenda:cliente_history", kwargs={"cliente_id": customer.pk}),
+            {"pagina": "1"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_invalid_history_page_returns_controlled_400_without_mutation(self):
+        customer = self.make_customer()
+        before = {
+            "clientes": list(Cliente.objects.values()),
+            "projetos": list(ProjetoKanban.objects.values()),
+            "agenda": list(AgendaContato.objects.values()),
+            "financeiro": list(LancamentoFinanceiro.objects.values()),
+            "eventos": list(EventoSistema.objects.values()),
+        }
+        urls = (
+            reverse("clientes_agenda:cliente_history", kwargs={"cliente_id": customer.pk}),
+            reverse("clientes_agenda:cliente_360", kwargs={"cliente_id": customer.pk}),
+        )
+        for url in urls:
+            for page in ("0", "-1", "abc", "1001"):
+                with self.subTest(url=url, page=page):
+                    response = self.client.get(url, {"pagina": page})
+                    self.assertEqual(response.status_code, 400)
+                    self.assertContains(response, "Página de histórico inválida.", status_code=400)
+                    self.assertNotContains(response, "Traceback", status_code=400)
+        after = {
+            "clientes": list(Cliente.objects.values()),
+            "projetos": list(ProjetoKanban.objects.values()),
+            "agenda": list(AgendaContato.objects.values()),
+            "financeiro": list(LancamentoFinanceiro.objects.values()),
+            "eventos": list(EventoSistema.objects.values()),
+        }
+        self.assertEqual(before, after)
+
     def test_index_post_is_405(self):
         self.assertEqual(self.client.post(reverse("clientes_agenda:clientes")).status_code, 405)
 
@@ -503,4 +544,4 @@ class Customer360FrontendTests(Customer360FixturesMixin, TestCase):
         self.assertNotContains(response, "WhatsApp do cliente")
 
 
-__all__ = ["Customer360SelectorTests", "Customer360FrontendTests"]
+__all__ = ["Customer360FrontendTests", "Customer360SelectorTests"]

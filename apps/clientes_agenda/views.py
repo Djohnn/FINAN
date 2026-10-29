@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from django.http import Http404, HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -16,6 +16,7 @@ from .selectors import (
     Cliente360NotFound,
     ClienteIndexRow,
     ContatoCliente360,
+    InvalidHistoryPage,
     ProjetoCliente360,
     cliente_360,
     clientes_index,
@@ -30,12 +31,14 @@ def _money(value: Decimal | None) -> str:
 
 
 def _page_from_request(request: HttpRequest) -> int:
-    raw = request.GET.get("pagina", "1")
+    raw = request.GET.get("pagina")
+    if raw is None:
+        return 1
     try:
         page = int(raw)
-    except (TypeError, ValueError):
-        return 1
-    return page if page > 0 else 1
+    except (TypeError, ValueError) as exc:
+        raise InvalidHistoryPage from exc
+    return page
 
 
 def _index_row_context(row: ClienteIndexRow) -> dict:
@@ -115,6 +118,8 @@ def cliente_360_view(request: HttpRequest, cliente_id: int) -> HttpResponse:
         )
     except Cliente360NotFound as exc:
         raise Http404("Cliente não encontrado.") from exc
+    except InvalidHistoryPage:
+        return HttpResponseBadRequest("Página de histórico inválida.")
     return render(request, "clientes_agenda/cliente_360.html", _detail_context(customer))
 
 
@@ -128,6 +133,8 @@ def cliente_history_view(request: HttpRequest, cliente_id: int) -> HttpResponse:
         )
     except Cliente360NotFound as exc:
         raise Http404("Cliente não encontrado.") from exc
+    except InvalidHistoryPage:
+        return HttpResponseBadRequest("Página de histórico inválida.")
     return render(
         request,
         "clientes_agenda/_historico.html",
