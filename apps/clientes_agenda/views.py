@@ -6,6 +6,7 @@ from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadReque
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET
 
 from apps.kanban_projetos.models import ProjetoKanban
@@ -90,6 +91,7 @@ def _detail_context(customer: Cliente360) -> dict:
     }
 
 
+@csrf_exempt
 @require_GET
 def clientes_index_view(request: HttpRequest) -> HttpResponse:
     data_referencia = timezone.localdate()
@@ -108,6 +110,7 @@ def clientes_index_view(request: HttpRequest) -> HttpResponse:
     )
 
 
+@csrf_exempt
 @require_GET
 def cliente_360_view(request: HttpRequest, cliente_id: int) -> HttpResponse:
     try:
@@ -123,6 +126,7 @@ def cliente_360_view(request: HttpRequest, cliente_id: int) -> HttpResponse:
     return render(request, "clientes_agenda/cliente_360.html", _detail_context(customer))
 
 
+@csrf_exempt
 @require_GET
 def cliente_history_view(request: HttpRequest, cliente_id: int) -> HttpResponse:
     try:
@@ -142,6 +146,7 @@ def cliente_history_view(request: HttpRequest, cliente_id: int) -> HttpResponse:
     )
 
 
+@csrf_exempt
 @require_GET
 def cliente_project_whatsapp_view(
     request: HttpRequest,
@@ -160,6 +165,7 @@ def cliente_project_whatsapp_view(
     return redirect(url)
 
 
+@csrf_exempt
 @require_GET
 def cliente_contact_whatsapp_view(
     request: HttpRequest,

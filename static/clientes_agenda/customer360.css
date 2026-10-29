@@ -19,7 +19,7 @@
     --customer-radius: 14px;
 }
 
-.app-body { background: var(--customer-page); color: var(--customer-ink); }
+.app-body { background: var(--customer-page); color: var(--customer-ink); font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.45; }
 .site-header { background: var(--customer-surface); border-bottom: 1px solid var(--customer-line); }
 .site-header__inner { max-width: 1320px; margin: 0 auto; padding: 18px 28px; }
 .site-nav { display: flex; gap: 24px; margin-left: auto; }

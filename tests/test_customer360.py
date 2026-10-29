@@ -5,7 +5,8 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.db import connection
-from django.test import TestCase
+from django.middleware.csrf import get_token
+from django.test import Client, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
@@ -230,6 +231,24 @@ class Customer360SelectorTests(Customer360FixturesMixin, TestCase):
         self.assertTrue(first.history_has_more)
         self.assertEqual(first.history_next_page, 2)
         self.assertEqual(len(second.eventos), 5)
+        self.assertFalse(second.history_has_more)
+
+    def test_history_63_events_are_split_without_duplicates_and_in_descending_order(self):
+        customer = self.make_customer()
+        project = self.make_project(customer)
+        for _index in range(63):
+            self.make_event("PROJETO_FINALIZADO", "KANBAN", "ProjetoKanban", project.pk)
+
+        first = cliente_360(cliente_id=customer.pk, data_referencia=REFERENCE, history_page=1)
+        second = cliente_360(cliente_id=customer.pk, data_referencia=REFERENCE, history_page=2)
+        first_ids = [event.evento_id for event in first.eventos]
+        second_ids = [event.evento_id for event in second.eventos]
+
+        self.assertEqual(len(first_ids), 50)
+        self.assertEqual(len(second_ids), 13)
+        self.assertEqual(len(set(first_ids) & set(second_ids)), 0)
+        self.assertEqual(first_ids + second_ids, sorted(first_ids + second_ids, reverse=True))
+        self.assertTrue(first.history_has_more)
         self.assertFalse(second.history_has_more)
 
     def test_detail_query_count_does_not_grow_linearly_with_project_count(self):
@@ -468,6 +487,68 @@ class Customer360FrontendTests(Customer360FixturesMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Projeto finalizado")
         self.assertLessEqual(response.content.decode().count("data-history-event"), 50)
+
+    def test_detail_loads_local_history_script_for_bounded_continuation(self):
+        customer = self.make_customer()
+        project = self.make_project(customer)
+        for _index in range(63):
+            self.make_event("PROJETO_FINALIZADO", "KANBAN", "ProjetoKanban", project.pk)
+
+        response = self.client.get(reverse("clientes_agenda:cliente_360", kwargs={"cliente_id": customer.pk}))
+
+        self.assertContains(response, "clientes_agenda/customer360.js")
+        self.assertContains(response, 'data-history-next')
+        self.assertEqual(response.content.decode().count('data-history-event'), 50)
+
+    def test_get_only_views_reject_post_put_and_patch_with_or_without_csrf(self):
+        customer = self.make_customer()
+        project = self.make_project(customer)
+        contact = AgendaContato.objects.create(
+            cliente=customer,
+            projeto=project,
+            tipo="LIGACAO_MANUAL",
+            data_agendada=REFERENCE,
+        )
+        urls = (
+            reverse("clientes_agenda:clientes"),
+            reverse("clientes_agenda:cliente_360", kwargs={"cliente_id": customer.pk}),
+            reverse("clientes_agenda:cliente_history", kwargs={"cliente_id": customer.pk}),
+            reverse("clientes_agenda:cliente_project_whatsapp", kwargs={"cliente_id": customer.pk, "projeto_id": project.pk}),
+            reverse(
+                "clientes_agenda:cliente_contact_whatsapp",
+                kwargs={"cliente_id": customer.pk, "contato_id": contact.pk},
+            ),
+        )
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_response = csrf_client.get(reverse("clientes_agenda:clientes"))
+        csrf_token = get_token(csrf_response.wsgi_request)
+        csrf_client.cookies["csrftoken"] = csrf_token
+        before = {
+            "clientes": list(Cliente.objects.values()),
+            "projetos": list(ProjetoKanban.objects.values()),
+            "agenda": list(AgendaContato.objects.values()),
+            "financeiro": list(LancamentoFinanceiro.objects.values()),
+            "eventos": list(EventoSistema.objects.values()),
+        }
+
+        for url in urls:
+            with self.subTest(method="POST", csrf=False, url=url):
+                self.assertEqual(csrf_client.post(url).status_code, 405)
+            with self.subTest(method="POST", csrf=True, url=url):
+                self.assertEqual(csrf_client.post(url, HTTP_X_CSRFTOKEN=csrf_token).status_code, 405)
+            with self.subTest(method="PUT", csrf=False, url=url):
+                self.assertEqual(csrf_client.put(url).status_code, 405)
+            with self.subTest(method="PATCH", csrf=False, url=url):
+                self.assertEqual(csrf_client.patch(url).status_code, 405)
+
+        after = {
+            "clientes": list(Cliente.objects.values()),
+            "projetos": list(ProjetoKanban.objects.values()),
+            "agenda": list(AgendaContato.objects.values()),
+            "financeiro": list(LancamentoFinanceiro.objects.values()),
+            "eventos": list(EventoSistema.objects.values()),
+        }
+        self.assertEqual(before, after)
 
     def test_history_page_missing_defaults_to_first_page(self):
         customer = self.make_customer()
