@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Clientes | FinanPE{% endblock %}
+
+{% block styles %}
+    <link rel="stylesheet" href="{% static 'clientes_agenda/customer360.css' %}">
+{% endblock %}
+
+{% block header_nav %}
+    <nav class="site-nav" aria-label="Navegação principal">
+        <a class="site-nav__link site-nav__link--active" href="{% url 'clientes_agenda:clientes' %}" aria-current="page">Clientes</a>
+    </nav>
+{% endblock %}
+
+{% block content %}
+    <div class="customer-shell customer-shell--index">
+        <section class="customer-page-heading" aria-labelledby="page-title">
+            <div>
+                <p class="eyebrow">Consulta de clientes</p>
+                <h1 id="page-title">Clientes</h1>
+                <p>Encontre um cliente e consulte sua história com a marcenaria.</p>
+            </div>
+            <span class="readonly-badge">Somente consulta</span>
+        </section>
+
+        <section class="customer-filter" aria-labelledby="search-title">
+            <h2 id="search-title">Buscar por nome ou telefone</h2>
+            <form method="get" action="{% url 'clientes_agenda:clientes' %}" class="customer-filter__form">
+                <label class="visually-hidden" for="customer-search">Nome ou telefone</label>
+                <input id="customer-search" name="q" type="search" value="{{ index.query }}" placeholder="Ex.: Mariana Alves" autocomplete="off">
+                <button class="button button--primary" type="submit">Buscar</button>
+                {% if index.query %}<a class="button button--quiet" href="{% url 'clientes_agenda:clientes' %}">Limpar busca</a>{% endif %}
+            </form>
+        </section>
+
+        {% if rows %}
+            <div class="customer-index-summary" aria-live="polite">
+                <span>{{ rows|length }} cliente{{ rows|length|pluralize }} encontrado{{ rows|length|pluralize }}</span>
+                <span>{{ index.total_cadastrados }} cliente{{ index.total_cadastrados|pluralize }} no cadastro · {{ index.clientes_com_contato_pendente }} com contato pendente</span>
+            </div>
+            <section class="customer-table-panel" aria-labelledby="customer-table-title">
+                <h2 id="customer-table-title" class="visually-hidden">Lista de clientes</h2>
+                <div class="customer-table-wrap">
+                    <table class="customer-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Cliente</th>
+                                <th scope="col">WhatsApp / telefone</th>
+                                <th scope="col">Projetos</th>
+                                <th scope="col">Próximo contato</th>
+                                <th scope="col"><span class="visually-hidden">Ação</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in rows %}
+                                <tr>
+                                    <th scope="row"><span class="customer-name">{{ item.row.nome }}</span></th>
+                                    <td>{{ item.row.whatsapp }}</td>
+                                    <td>{{ item.row.projetos_count }}</td>
+                                    <td>
+                                        {% if item.next_contact_date %}
+                                            <span>{{ item.next_contact_date|date:"d/m/Y" }} · {{ item.next_contact_label }}</span>
+                                            {% if item.row.proximo_contato_atrasado_ou_hoje %}<small>Contato pendente</small>{% endif %}
+                                        {% else %}
+                                            <span>Nenhum contato agendado</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="customer-table__action">
+                                        <a class="button button--secondary" href="{% url 'clientes_agenda:cliente_360' cliente_id=item.row.cliente_id %}">Ver cliente</a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        {% elif has_clients %}
+            <section class="customer-empty" aria-live="polite">
+                <p class="eyebrow">Nenhum cliente encontrado</p>
+                <h2>Não encontramos esse nome ou telefone.</h2>
+                <p>{{ index.total_cadastrados }} cliente{{ index.total_cadastrados|pluralize }} no cadastro. Tente outro termo ou limpe a busca.</p>
+            </section>
+        {% else %}
+            <section class="customer-empty" aria-live="polite">
+                <p class="eyebrow">Nenhum cliente cadastrado</p>
+                <h2>Os clientes aparecerão aqui.</h2>
+                <p>Quando houver clientes no cadastro, você poderá consultar seus projetos, contatos e histórico nesta tela.</p>
+            </section>
+        {% endif %}
+
+        <footer class="customer-footer">FinanPE · Customer 360 · somente leitura</footer>
+    </div>
+{% endblock %}
