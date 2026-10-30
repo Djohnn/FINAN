@@ -1,7 +1,10 @@
 from django.contrib import admin
+from django.contrib import messages
+from django.contrib.admin.actions import delete_selected as django_delete_selected
 from django.core.exceptions import ValidationError
+from django.http import HttpResponseRedirect
 
-from .models import DespesaRecorrente, LancamentoFinanceiro
+from .models import LancamentoFinanceiro
 
 
 @admin.register(LancamentoFinanceiro)
@@ -29,6 +32,13 @@ class LancamentoFinanceiroAdmin(admin.ModelAdmin):
         'funcionario__nome',
     )
     date_hierarchy = 'data_vencimento'
+    actions = ('delete_selected',)
+
+    def get_exclude(self, request, obj=None):
+        exclude = list(super().get_exclude(request, obj) or ())
+        if obj is None:
+            exclude.extend(('recorrencia', 'competencia'))
+        return tuple(dict.fromkeys(exclude))
 
     def get_readonly_fields(self, request, obj=None):
         readonly_fields = list(super().get_readonly_fields(request, obj))
@@ -52,6 +62,10 @@ class LancamentoFinanceiroAdmin(admin.ModelAdmin):
             )
 
     def save_model(self, request, obj, form, change):
+        if not obj.pk and obj.recorrencia_id is not None:
+            raise ValidationError(
+                'A criação manual de lançamentos recorrentes não é permitida.'
+            )
         self._ensure_identity_unchanged(obj)
         super().save_model(request, obj, form, change)
 
@@ -74,23 +88,13 @@ class LancamentoFinanceiroAdmin(admin.ModelAdmin):
             )
         super().delete_queryset(request, queryset)
 
-
-@admin.register(DespesaRecorrente)
-class DespesaRecorrenteAdmin(admin.ModelAdmin):
-    list_display = (
-        'descricao',
-        'categoria',
-        'valor',
-        'forma_pagamento',
-        'dia_vencimento',
-        'data_inicio',
-        'data_fim',
-        'ativo',
-        'criado_em',
-    )
-    list_filter = (
-        'categoria',
-        'forma_pagamento',
-        'ativo',
-    )
-    search_fields = ('descricao', 'observacao')
+    @admin.action(description='Excluir lançamentos selecionados')
+    def delete_selected(self, request, queryset):
+        if queryset.filter(recorrencia_id__isnull=False).exists():
+            self.message_user(
+                request,
+                'A seleção contém lançamento recorrente e não pode ser excluída.',
+                messages.ERROR,
+            )
+            return HttpResponseRedirect(request.get_full_path())
+        return django_delete_selected(self, request, queryset)

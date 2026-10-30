@@ -1,6 +1,8 @@
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
@@ -8,7 +10,8 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
 from django.db.models.deletion import ProtectedError
 from django.db.migrations.executor import MigrationExecutor
-from django.test import RequestFactory, TestCase, TransactionTestCase
+from django.test import Client, RequestFactory, TestCase, TransactionTestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.clientes_agenda.models import Cliente
@@ -17,6 +20,24 @@ from apps.financeiro.admin import LancamentoFinanceiroAdmin
 from apps.financeiro.models import DespesaRecorrente, LancamentoFinanceiro
 from apps.kanban_projetos.models import ProjetoKanban
 
+SAO_PAULO = ZoneInfo('America/Sao_Paulo')
+UTC = ZoneInfo('UTC')
+FIXED_CREATED_AT = datetime(2026, 10, 15, 12, tzinfo=SAO_PAULO)
+
+
+def create_recorrencia(**overrides):
+    created_at = overrides.pop('_created_at', FIXED_CREATED_AT)
+    data = {
+        'descricao': 'Internet da oficina',
+        'categoria': 'CUSTO_FIXO_OFICINA',
+        'valor': Decimal('149.90'),
+        'forma_pagamento': 'PIX',
+        'dia_vencimento': 10,
+        'data_inicio': date(2026, 10, 1),
+        **overrides,
+    }
+    with patch('django.utils.timezone.now', return_value=created_at):
+        return DespesaRecorrente.objects.create(**data)
 
 class DespesaRecorrenteModelTests(TestCase):
     def test_model_declares_required_fields_and_financial_choices(self):
@@ -49,14 +70,7 @@ class DespesaRecorrenteModelTests(TestCase):
             dict(DespesaRecorrente.FORMA_PAGAMENTO_CHOICES),
         )
 
-        recorrencia = DespesaRecorrente.objects.create(
-            descricao='Internet da oficina',
-            categoria='CUSTO_FIXO_OFICINA',
-            valor=Decimal('149.90'),
-            forma_pagamento='PIX',
-            dia_vencimento=10,
-            data_inicio=date(2026, 10, 1),
-        )
+        recorrencia = create_recorrencia()
         self.assertTrue(recorrencia.ativo)
         self.assertIsNotNone(recorrencia.criado_em)
 
@@ -73,6 +87,9 @@ class DespesaRecorrenteModelTests(TestCase):
 
     def test_rejects_invalid_money_without_rounding(self):
         for value in (
+            1.23,
+            True,
+            False,
             Decimal('0'),
             Decimal('-0.01'),
             Decimal('1.234'),
@@ -82,6 +99,27 @@ class DespesaRecorrenteModelTests(TestCase):
         ):
             with self.subTest(value=value), self.assertRaises(ValidationError):
                 DespesaRecorrente.objects.create(**self._kwargs(valor=value))
+
+    def test_accepts_decimal_and_valid_decimal_string_money(self):
+        decimal_value = create_recorrencia(valor=Decimal('199.90'))
+        string_value = create_recorrencia(
+            descricao='Telefone da oficina',
+            valor='89.90',
+        )
+        self.assertEqual(decimal_value.valor, Decimal('199.90'))
+        self.assertEqual(string_value.valor, Decimal('89.90'))
+
+    def test_legacy_ledger_float_path_remains_compatible(self):
+        legacy = LancamentoFinanceiro.objects.create(
+            tipo='SAIDA',
+            categoria='OUTROS',
+            descricao='Legado float 7A',
+            valor=1.23,
+            forma_pagamento='PIX',
+            data_vencimento=date(2026, 10, 10),
+            status='PENDENTE',
+        )
+        self.assertEqual(legacy.valor, Decimal('1.23'))
 
     def test_rejects_invalid_choice_day_and_date_range(self):
         cases = (
@@ -97,7 +135,7 @@ class DespesaRecorrenteModelTests(TestCase):
                 DespesaRecorrente.objects.create(**self._kwargs(**overrides))
 
     def test_criado_em_is_immutable_after_creation(self):
-        recorrencia = DespesaRecorrente.objects.create(**self._kwargs())
+        recorrencia = create_recorrencia(**self._kwargs())
         criado_em = recorrencia.criado_em
         recorrencia.criado_em = criado_em - timedelta(days=1)
 
@@ -110,14 +148,7 @@ class DespesaRecorrenteModelTests(TestCase):
 
 class LedgerRecurrenceModelTests(TestCase):
     def setUp(self):
-        self.recorrencia = DespesaRecorrente.objects.create(
-            descricao='Internet da oficina',
-            categoria='CUSTO_FIXO_OFICINA',
-            valor=Decimal('149.90'),
-            forma_pagamento='PIX',
-            dia_vencimento=10,
-            data_inicio=date(2026, 10, 1),
-        )
+        self.recorrencia = create_recorrencia()
 
     def _kwargs(self, **overrides):
         return {
@@ -154,6 +185,48 @@ class LedgerRecurrenceModelTests(TestCase):
                 **self._kwargs(competencia=date(2026, 10, 1))
             )
 
+    def test_recurring_origin_has_approved_initial_invariants(self):
+        cliente = Cliente.objects.create(nome='Cliente origem 7A', whatsapp='11911111111')
+        projeto = ProjetoKanban.objects.create(
+            cliente=cliente,
+            titulo_servico='Projeto origem 7A',
+            etapa='1_CONTATO',
+        )
+        funcionario = Funcionario.objects.create(
+            nome='Funcionário origem 7A',
+            funcao='Montador',
+            periodicidade='MENSAL',
+            valor_base=Decimal('100.00'),
+        )
+        invalid_origins = (
+            {'tipo': 'ENTRADA'},
+            {'status': 'PAGO'},
+            {'projeto': projeto},
+            {'funcionario': funcionario},
+            {'data_pagamento': date(2026, 10, 10)},
+        )
+        for overrides in invalid_origins:
+            with self.subTest(overrides=overrides), self.assertRaises(ValidationError):
+                LancamentoFinanceiro.objects.create(
+                    **self._kwargs(
+                        recorrencia=self.recorrencia,
+                        competencia=date(2026, 10, 1),
+                        **overrides,
+                    )
+                )
+
+        row = LancamentoFinanceiro.objects.create(
+            **self._kwargs(
+                recorrencia=self.recorrencia,
+                competencia=date(2026, 10, 1),
+            )
+        )
+        self.assertEqual(row.tipo, 'SAIDA')
+        self.assertEqual(row.status, 'PENDENTE')
+        self.assertIsNone(row.projeto_id)
+        self.assertIsNone(row.funcionario_id)
+        self.assertIsNone(row.data_pagamento)
+
     def test_competence_must_be_first_day_and_february_is_valid(self):
         with self.assertRaises(ValidationError):
             LancamentoFinanceiro.objects.create(
@@ -171,7 +244,10 @@ class LedgerRecurrenceModelTests(TestCase):
         self.assertEqual(row.competencia, date(2027, 2, 1))
 
     def test_competence_cannot_precede_recurrence_creation_month_cutoff(self):
-        cutoff = timezone.localtime(self.recorrencia.criado_em).date().replace(day=1)
+        cutoff = timezone.localtime(
+            self.recorrencia.criado_em,
+            SAO_PAULO,
+        ).date().replace(day=1)
         previous_month_cutoff = (cutoff - timedelta(days=1)).replace(day=1)
         with self.assertRaises(ValidationError):
             LancamentoFinanceiro.objects.create(
@@ -180,6 +256,23 @@ class LedgerRecurrenceModelTests(TestCase):
                     recorrencia=self.recorrencia,
                 )
             )
+        same_month = LancamentoFinanceiro.objects.create(
+            **self._kwargs(
+                descricao='Internet mês de cadastro',
+                competencia=cutoff,
+                recorrencia=self.recorrencia,
+            )
+        )
+        forgotten = LancamentoFinanceiro.objects.create(
+            **self._kwargs(
+                descricao='Internet competência esquecida',
+                competencia=date(2027, 3, 1),
+                data_vencimento=date(2027, 3, 10),
+                recorrencia=self.recorrencia,
+            )
+        )
+        self.assertEqual(same_month.competencia, cutoff)
+        self.assertEqual(forgotten.competencia, date(2027, 3, 1))
 
     def test_recurrence_and_competence_pair_is_unique(self):
         kwargs = self._kwargs(
@@ -205,8 +298,6 @@ class LedgerRecurrenceModelTests(TestCase):
         )
         row = LancamentoFinanceiro.objects.create(
             **self._kwargs(
-                projeto=projeto,
-                funcionario=funcionario,
                 competencia=date(2026, 10, 1),
                 recorrencia=self.recorrencia,
             )
@@ -232,11 +323,18 @@ class LedgerRecurrenceModelTests(TestCase):
         row.refresh_from_db()
         self.assertEqual(row.status, 'CANCELADO')
 
+        legacy = LancamentoFinanceiro.objects.create(
+            **self._kwargs(
+                descricao='Lançamento legado com vínculos removíveis',
+                projeto=projeto,
+                funcionario=funcionario,
+            )
+        )
         projeto.delete()
         funcionario.delete()
-        row.refresh_from_db()
-        self.assertIsNone(row.projeto_id)
-        self.assertIsNone(row.funcionario_id)
+        legacy.refresh_from_db()
+        self.assertIsNone(legacy.projeto_id)
+        self.assertIsNone(legacy.funcionario_id)
 
     def test_model_and_queryset_delete_cannot_remove_recurring_ledger(self):
         row = LancamentoFinanceiro.objects.create(
@@ -247,9 +345,8 @@ class LedgerRecurrenceModelTests(TestCase):
         )
         row.status = 'CANCELADO'
         row.save(update_fields=['status'])
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                row.delete()
+        with self.assertRaises(ValidationError):
+            row.delete()
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 LancamentoFinanceiro.objects.filter(pk=row.pk).delete()
@@ -278,18 +375,86 @@ class LedgerRecurrenceModelTests(TestCase):
         self.assertTrue(LancamentoFinanceiro.objects.filter(pk=linked.pk).exists())
 
 
+class RecurrenceCutoffTimezoneTests(TestCase):
+    def _ledger_kwargs(self, **overrides):
+        return {
+            'tipo': 'SAIDA',
+            'categoria': 'CUSTO_FIXO_OFICINA',
+            'descricao': 'Competência temporal 7A',
+            'valor': Decimal('149.90'),
+            'forma_pagamento': 'PIX',
+            'data_vencimento': date(2027, 1, 10),
+            'status': 'PENDENTE',
+            **overrides,
+        }
+
+    def test_cutoff_uses_sao_paulo_when_utc_crosses_month_boundary(self):
+        before_local_midnight = datetime(2027, 1, 1, 2, 59, tzinfo=UTC)
+        after_local_midnight = datetime(2027, 1, 1, 3, 0, tzinfo=UTC)
+
+        with timezone.override('UTC'):
+            before_local = create_recorrencia(
+                descricao='Cadastro ainda em dezembro local',
+                _created_at=before_local_midnight,
+            )
+            after_local = create_recorrencia(
+                descricao='Cadastro já em janeiro local',
+                _created_at=after_local_midnight,
+            )
+
+        valid_before = LancamentoFinanceiro.objects.create(
+            **self._ledger_kwargs(
+                descricao='Dezembro local válido',
+                competencia=date(2026, 12, 1),
+                recorrencia=before_local,
+            )
+        )
+        self.assertEqual(valid_before.competencia, date(2026, 12, 1))
+        with self.assertRaises(ValidationError):
+            LancamentoFinanceiro.objects.create(
+                **self._ledger_kwargs(
+                    descricao='Novembro local inválido',
+                    competencia=date(2026, 11, 1),
+                    recorrencia=before_local,
+                )
+            )
+
+        valid_after = LancamentoFinanceiro.objects.create(
+            **self._ledger_kwargs(
+                descricao='Janeiro local válido',
+                competencia=date(2027, 1, 1),
+                recorrencia=after_local,
+            )
+        )
+        self.assertEqual(valid_after.competencia, date(2027, 1, 1))
+        with self.assertRaises(ValidationError):
+            LancamentoFinanceiro.objects.create(
+                **self._ledger_kwargs(
+                    descricao='Dezembro local inválido',
+                    competencia=date(2026, 12, 1),
+                    recorrencia=after_local,
+                )
+            )
+
+
 class RawSQLitePhase7IntegrityTests(TestCase):
     def _recorrencia(self):
-        return DespesaRecorrente.objects.create(
+        return create_recorrencia(
             descricao='Energia 7A',
-            categoria='CUSTO_FIXO_OFICINA',
             valor=Decimal('250.00'),
             forma_pagamento='BOLETO',
-            dia_vencimento=10,
-            data_inicio=date(2026, 10, 1),
         )
 
-    def _raw_insert(self, *, recorrencia_id=None, competencia=None, descricao='raw'):
+    def _raw_insert(
+        self,
+        *,
+        recorrencia_id=None,
+        competencia=None,
+        descricao='raw',
+        tipo='SAIDA',
+        status='PENDENTE',
+        data_pagamento=None,
+    ):
         table = connection.ops.quote_name(LancamentoFinanceiro._meta.db_table)
         raw = connection.connection
         raw.execute(
@@ -301,8 +466,8 @@ class RawSQLitePhase7IntegrityTests(TestCase):
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
             (
-                'SAIDA', 'CUSTO_FIXO_OFICINA', descricao, '250.00', 'PIX',
-                '2026-10-10', None, 'PENDENTE', None, None,
+                tipo, 'CUSTO_FIXO_OFICINA', descricao, '250.00', 'PIX',
+                '2026-10-10', data_pagamento, status, None, None,
                 recorrencia_id, competencia,
             ),
         )
@@ -320,6 +485,27 @@ class RawSQLitePhase7IntegrityTests(TestCase):
             self._raw_insert(recorrencia_id=recurrence.pk, competencia=None)
         with self.assertRaises(sqlite3.IntegrityError):
             self._raw_insert(recorrencia_id=None, competencia='2026-10-01')
+        with self.assertRaises(sqlite3.IntegrityError):
+            self._raw_insert(
+                recorrencia_id=recurrence.pk,
+                competencia='2026-10-01',
+                tipo='ENTRADA',
+                descricao='origem-invalida',
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self._raw_insert(
+                recorrencia_id=recurrence.pk,
+                competencia='2026-10-01',
+                status='PAGO',
+                descricao='status-invalido',
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self._raw_insert(
+                recorrencia_id=recurrence.pk,
+                competencia='2026-10-01',
+                data_pagamento='2026-10-10',
+                descricao='quitacao-invalida',
+            )
 
         self._raw_insert(recorrencia_id=recurrence.pk, competencia='2026-10-01')
         with self.assertRaises(sqlite3.IntegrityError):
@@ -350,6 +536,29 @@ class RawSQLitePhase7IntegrityTests(TestCase):
             )
 
         raw = connection.connection
+        linked_id = raw.execute(
+            f'SELECT id FROM {connection.ops.quote_name(LancamentoFinanceiro._meta.db_table)} '
+            'WHERE recorrencia_id = ? AND competencia = ?',
+            (recurrence.pk, '2026-10-01'),
+        ).fetchone()[0]
+        with self.assertRaises(sqlite3.IntegrityError):
+            raw.execute(
+                f'DELETE FROM {connection.ops.quote_name(LancamentoFinanceiro._meta.db_table)} '
+                'WHERE id = ?',
+                (linked_id,),
+            )
+        legacy_id = raw.execute(
+            f'SELECT id FROM {connection.ops.quote_name(LancamentoFinanceiro._meta.db_table)} '
+            "WHERE descricao = 'legacy-1'",
+        ).fetchone()[0]
+        raw.execute(
+            f'DELETE FROM {connection.ops.quote_name(LancamentoFinanceiro._meta.db_table)} '
+            'WHERE id = ?',
+            (legacy_id,),
+        )
+        self.assertFalse(
+            LancamentoFinanceiro.objects.filter(pk=legacy_id).exists()
+        )
         integrity_check = raw.execute('PRAGMA integrity_check').fetchone()[0]
         foreign_key_check = raw.execute('PRAGMA foreign_key_check').fetchall()
         print(f'PRAGMA integrity_check={integrity_check!r}')
@@ -364,20 +573,14 @@ class LancamentoFinanceiroAdminTests(TestCase):
             LancamentoFinanceiro,
             admin.site,
         )
+        self.client = Client()
         self.request = RequestFactory().get('/admin/financeiro/lancamentofinanceiro/')
         self.request.user = get_user_model().objects.create_superuser(
             username='admin-7a',
             email='admin-7a@example.com',
             password='test-password',
         )
-        self.recorrencia = DespesaRecorrente.objects.create(
-            descricao='Admin 7A',
-            categoria='CUSTO_FIXO_OFICINA',
-            valor=Decimal('250.00'),
-            forma_pagamento='PIX',
-            dia_vencimento=10,
-            data_inicio=date(2026, 10, 1),
-        )
+        self.recorrencia = create_recorrencia(descricao='Admin 7A', valor=Decimal('250.00'))
         self.row = LancamentoFinanceiro.objects.create(
             tipo='SAIDA',
             categoria='CUSTO_FIXO_OFICINA',
@@ -389,6 +592,7 @@ class LancamentoFinanceiroAdminTests(TestCase):
             recorrencia=self.recorrencia,
             competencia=date(2026, 10, 1),
         )
+        self.client.force_login(self.request.user)
 
     def test_admin_hides_identity_on_change_and_denies_delete_paths(self):
         readonly = self.model_admin.get_readonly_fields(self.request, self.row)
@@ -422,6 +626,73 @@ class LancamentoFinanceiroAdminTests(TestCase):
             self.request,
             LancamentoFinanceiro.objects.filter(pk=legacy.pk),
         )
+        self.assertFalse(LancamentoFinanceiro.objects.filter(pk=legacy.pk).exists())
+
+    def test_admin_hides_recurring_crud_and_add_linkage(self):
+        add_form = self.model_admin.get_form(self.request)()
+        self.assertNotIn('recorrencia', add_form.fields)
+        self.assertNotIn('competencia', add_form.fields)
+        self.assertNotIn(DespesaRecorrente, admin.site._registry)
+
+        new_row = LancamentoFinanceiro(
+            tipo='SAIDA',
+            categoria='CUSTO_FIXO_OFICINA',
+            descricao='Admin origem recorrente',
+            valor=Decimal('250.00'),
+            forma_pagamento='PIX',
+            data_vencimento=date(2026, 10, 10),
+            status='PENDENTE',
+            recorrencia=self.recorrencia,
+            competencia=date(2026, 10, 1),
+        )
+        with self.assertRaises(ValidationError):
+            self.model_admin.save_model(self.request, new_row, form=None, change=False)
+
+    def test_admin_http_individual_delete_is_forbidden_without_500(self):
+        url = reverse(
+            'admin:financeiro_lancamentofinanceiro_delete',
+            kwargs={'object_id': self.row.pk},
+        )
+        response = self.client.post(url, {'post': 'yes'})
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(
+            LancamentoFinanceiro.objects.filter(pk=self.row.pk).exists()
+        )
+
+    def test_admin_http_batch_delete_refuses_recurring_row_with_message(self):
+        url = reverse('admin:financeiro_lancamentofinanceiro_changelist')
+        selection = {
+            'action': 'delete_selected',
+            '_selected_action': str(self.row.pk),
+            'index': '0',
+        }
+        response = self.client.post(
+            url,
+            {**selection, 'post': 'yes'},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'seleção contém lançamento recorrente')
+        self.assertTrue(
+            LancamentoFinanceiro.objects.filter(pk=self.row.pk).exists()
+        )
+
+    def test_admin_http_legacy_delete_remains_allowed(self):
+        legacy = LancamentoFinanceiro.objects.create(
+            tipo='SAIDA',
+            categoria='OUTROS',
+            descricao='Admin legacy HTTP',
+            valor=Decimal('10.00'),
+            forma_pagamento='PIX',
+            data_vencimento=date(2026, 10, 10),
+            status='PENDENTE',
+        )
+        url = reverse(
+            'admin:financeiro_lancamentofinanceiro_delete',
+            kwargs={'object_id': legacy.pk},
+        )
+        response = self.client.post(url, {'post': 'yes'})
+        self.assertEqual(response.status_code, 302)
         self.assertFalse(LancamentoFinanceiro.objects.filter(pk=legacy.pk).exists())
 
     def test_admin_delete_selected_action_uses_guarded_queryset_path(self):
@@ -462,6 +733,14 @@ class Phase7MigrationTests(TransactionTestCase):
                     "AND name='financeiro_lanc_identity_guard'"
                 )
                 self.assertEqual(cursor.fetchone()[0], 'financeiro_lanc_identity_guard')
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='trigger' "
+                    "AND name='financeiro_lanc_recorrente_origin_guard'"
+                )
+                self.assertEqual(
+                    cursor.fetchone()[0],
+                    'financeiro_lanc_recorrente_origin_guard',
+                )
 
             executor = MigrationExecutor(connection)
             executor.migrate([('financeiro', '0001_initial')])

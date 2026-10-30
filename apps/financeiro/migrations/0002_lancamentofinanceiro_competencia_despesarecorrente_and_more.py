@@ -54,6 +54,22 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             sql=[
                 """
+                CREATE TRIGGER financeiro_lanc_recorrente_origin_guard
+                BEFORE INSERT ON financeiro_lancamentofinanceiro
+                FOR EACH ROW
+                WHEN NEW.recorrencia_id IS NOT NULL
+                 AND (
+                     NEW.tipo IS NOT 'SAIDA'
+                     OR NEW.status IS NOT 'PENDENTE'
+                     OR NEW.projeto_id IS NOT NULL
+                     OR NEW.funcionario_id IS NOT NULL
+                     OR NEW.data_pagamento IS NOT NULL
+                 )
+                BEGIN
+                    SELECT RAISE(ABORT, 'recurring ledger origin is invalid');
+                END;
+                """,
+                """
                 CREATE TRIGGER financeiro_lanc_competencia_insert_guard
                 BEFORE INSERT ON financeiro_lancamentofinanceiro
                 FOR EACH ROW
@@ -116,6 +132,7 @@ class Migration(migrations.Migration):
                 """,
             ],
             reverse_sql=[
+                'DROP TRIGGER IF EXISTS financeiro_lanc_recorrente_origin_guard;',
                 'DROP TRIGGER IF EXISTS financeiro_lanc_competencia_insert_guard;',
                 'DROP TRIGGER IF EXISTS financeiro_lanc_competencia_update_guard;',
                 'DROP TRIGGER IF EXISTS financeiro_lanc_identity_guard;',

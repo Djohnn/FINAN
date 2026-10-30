@@ -134,8 +134,18 @@ class LancamentoFinanceiro(models.Model):
         ]
 
     @classmethod
-    def validar_valor_monetario(cls, valor, *, permitir_zero=False) -> Decimal:
+    def validar_valor_monetario(
+        cls,
+        valor,
+        *,
+        permitir_zero=False,
+        rejeitar_float_bool=False,
+    ) -> Decimal:
         """Valida centavos exatos, finitude, magnitude e sinal sem arredondar."""
+        if rejeitar_float_bool and isinstance(valor, (float, bool)):
+            raise ValidationError(
+                {'valor': 'Use Decimal ou texto decimal; float e bool não são aceitos.'}
+            )
         try:
             valor = valor if isinstance(valor, Decimal) else Decimal(str(valor))
         except (InvalidOperation, TypeError, ValueError) as exc:
@@ -177,6 +187,32 @@ class LancamentoFinanceiro(models.Model):
             errors.update(exc.message_dict)
         has_recorrencia = self.recorrencia_id is not None
         has_competencia = self.competencia is not None
+        if self._state.adding and has_recorrencia:
+            creation_invariants = {
+                'tipo': self.tipo == 'SAIDA',
+                'status': self.status == 'PENDENTE',
+                'projeto': self.projeto_id is None,
+                'funcionario': self.funcionario_id is None,
+                'data_pagamento': self.data_pagamento is None,
+            }
+            invariant_messages = {
+                'tipo': 'Lançamentos recorrentes devem ser saídas.',
+                'status': 'Lançamentos recorrentes devem iniciar pendentes.',
+                'projeto': 'Lançamentos recorrentes não podem iniciar vinculados a projeto.',
+                'funcionario': (
+                    'Lançamentos recorrentes não podem iniciar vinculados a funcionário.'
+                ),
+                'data_pagamento': (
+                    'Lançamentos recorrentes não podem iniciar quitados.'
+                ),
+            }
+            errors.update(
+                {
+                    field_name: invariant_messages[field_name]
+                    for field_name, valid in creation_invariants.items()
+                    if not valid
+                }
+            )
         if has_recorrencia != has_competencia:
             errors['competencia'] = (
                 'Recorrência e competência devem ser informadas juntas.'
@@ -225,6 +261,13 @@ class LancamentoFinanceiro(models.Model):
                 )
         self.clean()
         return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.recorrencia_id is not None:
+            raise ValidationError(
+                'Lançamentos recorrentes não podem ser excluídos.'
+            )
+        return super().delete(*args, **kwargs)
 
     def __str__(self):
         return f"[{self.get_tipo_display()}] {self.descricao} - R$ {self.valor}"
@@ -307,7 +350,10 @@ class DespesaRecorrente(models.Model):
         }:
             errors['forma_pagamento'] = 'Escolha inválida.'
         try:
-            self.valor = LancamentoFinanceiro.validar_valor_monetario(self.valor)
+            self.valor = LancamentoFinanceiro.validar_valor_monetario(
+                self.valor,
+                rejeitar_float_bool=True,
+            )
         except ValidationError as exc:
             errors.update(exc.message_dict)
 
