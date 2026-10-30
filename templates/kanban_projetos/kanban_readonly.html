@@ -148,6 +148,7 @@
                             {% for card in column.projects %}
                                 {% with project=card.project %}
                                     <article
+                                        id="projeto-{{ project.pk }}"
                                         class="kanban-card{% if card.is_overdue %} kanban-card--overdue{% endif %}"
                                         data-project-id="{{ project.pk }}"
                                     >
@@ -242,7 +243,7 @@
             <div class="archive-grid" role="list" aria-label="Projetos arquivados">
                 {% for card in archived_column.projects %}
                     {% with project=card.project %}
-                        <article class="kanban-card kanban-card--archived" role="listitem" data-project-id="{{ project.pk }}">
+                        <article id="projeto-{{ project.pk }}" class="kanban-card kanban-card--archived" role="listitem" data-project-id="{{ project.pk }}">
                             <div class="kanban-card__topline">
                                 <span class="kanban-card__stage">{{ card.stage_label }}</span>
                                 <span class="kanban-card__archive-label">Arquivado</span>

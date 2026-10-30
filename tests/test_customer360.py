@@ -406,6 +406,51 @@ class Customer360FrontendTests(Customer360FixturesMixin, TestCase):
         self.assertLess(content.index("Total recebido"), content.index("Total contratado"))
         self.assertNotContains(response, "WhatsApp do cliente")
 
+    def test_project_links_target_unique_active_and_archived_kanban_cards(self):
+        customer = self.make_customer()
+        active = self.make_project(customer, title="Projeto ativo", stage="1_CONTATO")
+        archived = self.make_project(
+            customer,
+            title="Projeto arquivado",
+            stage="9_ARQUIVADO",
+            motivo_arquivamento="ADIOU_OBRA",
+        )
+
+        detail_response = self.client.get(
+            reverse("clientes_agenda:cliente_360", kwargs={"cliente_id": customer.pk})
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        detail_html = detail_response.content.decode()
+        kanban_url = reverse("kanban_projetos:kanban_readonly")
+        for project in (active, archived):
+            self.assertIn(
+                f'href="{kanban_url}#projeto-{project.pk}"',
+                detail_html,
+            )
+
+        kanban_response = self.client.get(kanban_url)
+        self.assertEqual(kanban_response.status_code, 200)
+        kanban_html = kanban_response.content.decode()
+        for project in (active, archived):
+            self.assertEqual(kanban_html.count(f'id="projeto-{project.pk}"'), 1)
+            self.assertIn(f'data-project-id="{project.pk}"', kanban_html)
+
+    def test_customer360_uses_one_main_landmark_without_nested_main(self):
+        customer = self.make_customer()
+        self.make_project(customer)
+
+        response = self.client.get(
+            reverse("clientes_agenda:cliente_360", kwargs={"cliente_id": customer.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertEqual(html.count("<main"), 1)
+        self.assertNotIn('<main class="customer-main-column">', html)
+        self.assertContains(response, "Projetos")
+        self.assertContains(response, "Relacionamento / agenda")
+        self.assertContains(response, "Histórico do cliente")
+
     def test_archived_and_no_contract_projects_render(self):
         customer = self.make_customer()
         self.make_project(customer, title="Closet arquivado", stage="9_ARQUIVADO", contract="500.00", motivo_arquivamento="ADIOU_OBRA")
