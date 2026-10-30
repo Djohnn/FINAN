@@ -42,8 +42,9 @@ class LancamentoFinanceiroAdmin(admin.ModelAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         readonly_fields = list(super().get_readonly_fields(request, obj))
-        if obj is not None:
+        if obj is not None and obj.recorrencia_id is not None:
             readonly_fields.extend(('recorrencia', 'competencia'))
+            readonly_fields.extend(('tipo', 'projeto', 'funcionario'))
         return tuple(dict.fromkeys(readonly_fields))
 
     @staticmethod
@@ -61,12 +62,33 @@ class LancamentoFinanceiroAdmin(admin.ModelAdmin):
                 'A identidade de recorrência e competência não pode ser alterada.'
             )
 
+    @staticmethod
+    def _ensure_recurring_structure_unchanged(obj):
+        if not obj.pk or obj.recorrencia_id is None:
+            return
+        persisted = LancamentoFinanceiro.objects.filter(pk=obj.pk).values(
+            'tipo', 'projeto_id', 'funcionario_id',
+        ).first()
+        current = {
+            'tipo': obj.tipo,
+            'projeto_id': obj.projeto_id,
+            'funcionario_id': obj.funcionario_id,
+        }
+        if persisted and any(
+            persisted[field_name] != current[field_name]
+            for field_name in ('tipo', 'projeto_id', 'funcionario_id')
+        ):
+            raise ValidationError(
+                'Tipo, projeto e funcionário são imutáveis em lançamentos recorrentes.'
+            )
+
     def save_model(self, request, obj, form, change):
         if not obj.pk and obj.recorrencia_id is not None:
             raise ValidationError(
                 'A criação manual de lançamentos recorrentes não é permitida.'
             )
         self._ensure_identity_unchanged(obj)
+        self._ensure_recurring_structure_unchanged(obj)
         super().save_model(request, obj, form, change)
 
     def has_delete_permission(self, request, obj=None):

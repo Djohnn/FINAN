@@ -131,6 +131,17 @@ class LancamentoFinanceiro(models.Model):
                 ),
                 name='financeiro_lanc_recorrencia_competencia_pair',
             ),
+            models.CheckConstraint(
+                condition=(
+                    Q(recorrencia__isnull=True)
+                    | Q(
+                        tipo='SAIDA',
+                        projeto__isnull=True,
+                        funcionario__isnull=True,
+                    )
+                ),
+                name='financeiro_lanc_recorrencia_invariants',
+            ),
         ]
 
     @classmethod
@@ -187,32 +198,40 @@ class LancamentoFinanceiro(models.Model):
             errors.update(exc.message_dict)
         has_recorrencia = self.recorrencia_id is not None
         has_competencia = self.competencia is not None
-        if self._state.adding and has_recorrencia:
-            creation_invariants = {
+        if has_recorrencia:
+            recurring_invariants = {
                 'tipo': self.tipo == 'SAIDA',
-                'status': self.status == 'PENDENTE',
                 'projeto': self.projeto_id is None,
                 'funcionario': self.funcionario_id is None,
-                'data_pagamento': self.data_pagamento is None,
             }
-            invariant_messages = {
+            recurring_invariant_messages = {
                 'tipo': 'Lançamentos recorrentes devem ser saídas.',
-                'status': 'Lançamentos recorrentes devem iniciar pendentes.',
-                'projeto': 'Lançamentos recorrentes não podem iniciar vinculados a projeto.',
-                'funcionario': (
-                    'Lançamentos recorrentes não podem iniciar vinculados a funcionário.'
-                ),
-                'data_pagamento': (
-                    'Lançamentos recorrentes não podem iniciar quitados.'
-                ),
+                'projeto': 'Lançamentos recorrentes não podem ter projeto.',
+                'funcionario': 'Lançamentos recorrentes não podem ter funcionário.',
             }
             errors.update(
                 {
-                    field_name: invariant_messages[field_name]
-                    for field_name, valid in creation_invariants.items()
+                    field_name: recurring_invariant_messages[field_name]
+                    for field_name, valid in recurring_invariants.items()
                     if not valid
                 }
             )
+            if self._state.adding:
+                initial_invariants = {
+                    'status': self.status == 'PENDENTE',
+                    'data_pagamento': self.data_pagamento is None,
+                }
+                initial_invariant_messages = {
+                    'status': 'Lançamentos recorrentes devem iniciar pendentes.',
+                    'data_pagamento': 'Lançamentos recorrentes não podem iniciar quitados.',
+                }
+                errors.update(
+                    {
+                        field_name: initial_invariant_messages[field_name]
+                        for field_name, valid in initial_invariants.items()
+                        if not valid
+                    }
+                )
         if has_recorrencia != has_competencia:
             errors['competencia'] = (
                 'Recorrência e competência devem ser informadas juntas.'

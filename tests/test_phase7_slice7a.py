@@ -69,6 +69,10 @@ class DespesaRecorrenteModelTests(TestCase):
             dict(DespesaRecorrente._meta.get_field('forma_pagamento').choices),
             dict(DespesaRecorrente.FORMA_PAGAMENTO_CHOICES),
         )
+        self.assertIn(
+            'financeiro_lanc_recorrencia_invariants',
+            {constraint.name for constraint in LancamentoFinanceiro._meta.constraints},
+        )
 
         recorrencia = create_recorrencia()
         self.assertTrue(recorrencia.ativo)
@@ -255,6 +259,65 @@ class LedgerRecurrenceModelTests(TestCase):
         self.assertIsNone(row.funcionario_id)
         self.assertIsNone(row.data_pagamento)
 
+    def test_recurring_invariants_apply_to_existing_model_updates(self):
+        cliente = Cliente.objects.create(nome='Cliente update 7A', whatsapp='11922222222')
+        projeto = ProjetoKanban.objects.create(
+            cliente=cliente,
+            titulo_servico='Projeto update 7A',
+            etapa='1_CONTATO',
+        )
+        funcionario = Funcionario.objects.create(
+            nome='Funcionário update 7A',
+            funcao='Montador',
+            periodicidade='MENSAL',
+            valor_base=Decimal('100.00'),
+        )
+        row = LancamentoFinanceiro.objects.create(
+            **self._kwargs(
+                competencia=date(2026, 10, 1),
+                recorrencia=self.recorrencia,
+            )
+        )
+        for field_name, value in (
+            ('tipo', 'ENTRADA'),
+            ('projeto', projeto),
+            ('funcionario', funcionario),
+        ):
+            with self.subTest(field_name=field_name), self.assertRaises(ValidationError):
+                setattr(row, field_name, value)
+                row.save()
+            row.refresh_from_db()
+
+    def test_recurring_invariants_reject_queryset_updates(self):
+        cliente = Cliente.objects.create(nome='Cliente queryset 7A', whatsapp='11933333333')
+        projeto = ProjetoKanban.objects.create(
+            cliente=cliente,
+            titulo_servico='Projeto queryset 7A',
+            etapa='1_CONTATO',
+        )
+        funcionario = Funcionario.objects.create(
+            nome='Funcionário queryset 7A',
+            funcao='Montador',
+            periodicidade='MENSAL',
+            valor_base=Decimal('100.00'),
+        )
+        row = LancamentoFinanceiro.objects.create(
+            **self._kwargs(
+                competencia=date(2026, 10, 1),
+                recorrencia=self.recorrencia,
+            )
+        )
+        updates = (
+            {'tipo': 'ENTRADA'},
+            {'projeto': projeto},
+            {'funcionario': funcionario},
+        )
+        for values in updates:
+            with self.subTest(values=values), self.assertRaises(IntegrityError):
+                with transaction.atomic():
+                    LancamentoFinanceiro.objects.filter(pk=row.pk).update(**values)
+            row.refresh_from_db()
+
     def test_competence_must_be_first_day_and_february_is_valid(self):
         with self.assertRaises(ValidationError):
             LancamentoFinanceiro.objects.create(
@@ -333,10 +396,12 @@ class LedgerRecurrenceModelTests(TestCase):
 
         row.status = 'PAGO'
         row.data_pagamento = date(2026, 10, 10)
-        row.save(update_fields=['status', 'data_pagamento'])
+        row.forma_pagamento = 'BOLETO'
+        row.save(update_fields=['status', 'data_pagamento', 'forma_pagamento'])
         row.refresh_from_db()
         self.assertEqual(row.status, 'PAGO')
         self.assertEqual(row.data_pagamento, date(2026, 10, 10))
+        self.assertEqual(row.forma_pagamento, 'BOLETO')
 
         with self.assertRaises(ValidationError):
             row.competencia = date(2026, 11, 1)
@@ -482,6 +547,8 @@ class RawSQLitePhase7IntegrityTests(TestCase):
         tipo='SAIDA',
         status='PENDENTE',
         data_pagamento=None,
+        projeto_id=None,
+        funcionario_id=None,
     ):
         table = connection.ops.quote_name(LancamentoFinanceiro._meta.db_table)
         raw = connection.connection
@@ -495,7 +562,7 @@ class RawSQLitePhase7IntegrityTests(TestCase):
             ''',
             (
                 tipo, 'CUSTO_FIXO_OFICINA', descricao, '250.00', 'PIX',
-                '2026-10-10', data_pagamento, status, None, None,
+                '2026-10-10', data_pagamento, status, projeto_id, funcionario_id,
                 recorrencia_id, competencia,
             ),
         )
@@ -564,11 +631,41 @@ class RawSQLitePhase7IntegrityTests(TestCase):
             )
 
         raw = connection.connection
+        cliente = Cliente.objects.create(nome='Cliente SQL 7A', whatsapp='11944444444')
+        projeto = ProjetoKanban.objects.create(
+            cliente=cliente,
+            titulo_servico='Projeto SQL 7A',
+            etapa='1_CONTATO',
+        )
+        funcionario = Funcionario.objects.create(
+            nome='Funcionário SQL 7A',
+            funcao='Montador',
+            periodicidade='MENSAL',
+            valor_base=Decimal('100.00'),
+        )
         linked_id = raw.execute(
             f'SELECT id FROM {connection.ops.quote_name(LancamentoFinanceiro._meta.db_table)} '
             'WHERE recorrencia_id = ? AND competencia = ?',
             (recurrence.pk, '2026-10-01'),
         ).fetchone()[0]
+        with self.assertRaises(sqlite3.IntegrityError):
+            raw.execute(
+                f'UPDATE {connection.ops.quote_name(LancamentoFinanceiro._meta.db_table)} '
+                'SET tipo = ? WHERE id = ?',
+                ('ENTRADA', linked_id),
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            raw.execute(
+                f'UPDATE {connection.ops.quote_name(LancamentoFinanceiro._meta.db_table)} '
+                'SET projeto_id = ? WHERE id = ?',
+                (projeto.pk, linked_id),
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            raw.execute(
+                f'UPDATE {connection.ops.quote_name(LancamentoFinanceiro._meta.db_table)} '
+                'SET funcionario_id = ? WHERE id = ?',
+                (funcionario.pk, linked_id),
+            )
         with self.assertRaises(sqlite3.IntegrityError):
             raw.execute(
                 f'DELETE FROM {connection.ops.quote_name(LancamentoFinanceiro._meta.db_table)} '
@@ -626,6 +723,9 @@ class LancamentoFinanceiroAdminTests(TestCase):
         readonly = self.model_admin.get_readonly_fields(self.request, self.row)
         self.assertIn('recorrencia', readonly)
         self.assertIn('competencia', readonly)
+        self.assertIn('tipo', readonly)
+        self.assertIn('projeto', readonly)
+        self.assertIn('funcionario', readonly)
         self.assertFalse(self.model_admin.has_delete_permission(self.request, self.row))
         with self.assertRaises(ValidationError):
             self.model_admin.delete_model(self.request, self.row)
@@ -634,6 +734,38 @@ class LancamentoFinanceiroAdminTests(TestCase):
                 self.request,
                 LancamentoFinanceiro.objects.filter(pk=self.row.pk),
             )
+
+    def test_admin_rejects_recurring_structural_changes_but_allows_status(self):
+        for field_name, value in (
+            ('tipo', 'ENTRADA'),
+            ('projeto', None),
+            ('funcionario', None),
+        ):
+            if field_name == 'projeto':
+                value = ProjetoKanban.objects.create(
+                    cliente=Cliente.objects.create(
+                        nome='Cliente admin guard 7A',
+                        whatsapp='11955555555',
+                    ),
+                    titulo_servico='Projeto admin guard 7A',
+                    etapa='1_CONTATO',
+                )
+            if field_name == 'funcionario':
+                value = Funcionario.objects.create(
+                    nome='Funcionário admin guard 7A',
+                    funcao='Montador',
+                    periodicidade='MENSAL',
+                    valor_base=Decimal('100.00'),
+                )
+            setattr(self.row, field_name, value)
+            with self.subTest(field_name=field_name), self.assertRaises(ValidationError):
+                self.model_admin.save_model(self.request, self.row, form=None, change=True)
+            self.row.refresh_from_db()
+
+        self.row.status = 'PAGO'
+        self.model_admin.save_model(self.request, self.row, form=None, change=True)
+        self.row.refresh_from_db()
+        self.assertEqual(self.row.status, 'PAGO')
 
     def test_admin_rejects_identity_change_but_allows_legacy_delete(self):
         self.row.competencia = date(2026, 11, 1)
@@ -729,7 +861,8 @@ class LancamentoFinanceiroAdminTests(TestCase):
 
 
 class Phase7MigrationTests(TransactionTestCase):
-    MIGRATION_NAME = '0002_lancamentofinanceiro_competencia_despesarecorrente_and_more'
+    MIGRATION_BASE = '0002_lancamentofinanceiro_competencia_despesarecorrente_and_more'
+    MIGRATION_NAME = '0003_lancamentofinanceiro_recorrencia_invariants'
 
     def test_schema_advances_rolls_back_reapplies_and_preserves_legacy_nulls(self):
         executor = MigrationExecutor(connection)
@@ -750,6 +883,8 @@ class Phase7MigrationTests(TransactionTestCase):
                 )
 
             executor = MigrationExecutor(connection)
+            executor.migrate([('financeiro', self.MIGRATION_BASE)])
+            executor = MigrationExecutor(connection)
             executor.migrate([('financeiro', self.MIGRATION_NAME)])
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -757,29 +892,45 @@ class Phase7MigrationTests(TransactionTestCase):
                 )
                 self.assertEqual(cursor.fetchall(), [(None, None)])
                 cursor.execute(
-                    "SELECT name FROM sqlite_master WHERE type='trigger' "
-                    "AND name='financeiro_lanc_identity_guard'"
+                    "SELECT name FROM sqlite_master WHERE type='trigger'"
                 )
-                self.assertEqual(cursor.fetchone()[0], 'financeiro_lanc_identity_guard')
+                trigger_names = {row[0] for row in cursor.fetchall()}
+                self.assertTrue(
+                    {
+                        'financeiro_despesa_rec_criado_em_guard',
+                        'financeiro_lanc_recorrente_origin_guard',
+                        'financeiro_lanc_competencia_insert_guard',
+                        'financeiro_lanc_competencia_update_guard',
+                        'financeiro_lanc_identity_guard',
+                        'financeiro_lanc_recorrente_delete_guard',
+                    }.issubset(trigger_names)
+                )
                 cursor.execute(
-                    "SELECT name FROM sqlite_master WHERE type='trigger' "
-                    "AND name='financeiro_lanc_recorrente_origin_guard'"
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+                    (LancamentoFinanceiro._meta.db_table,),
                 )
                 self.assertEqual(
-                    cursor.fetchone()[0],
-                    'financeiro_lanc_recorrente_origin_guard',
-                )
-                cursor.execute(
-                    "SELECT name FROM sqlite_master WHERE type='trigger' "
-                    "AND name='financeiro_despesa_rec_criado_em_guard'"
-                )
-                self.assertEqual(
-                    cursor.fetchone()[0],
-                    'financeiro_despesa_rec_criado_em_guard',
+                    cursor.fetchone()[0].count('financeiro_lanc_recorrencia_invariants'),
+                    1,
                 )
 
             executor = MigrationExecutor(connection)
-            executor.migrate([('financeiro', '0001_initial')])
+            executor.migrate([('financeiro', self.MIGRATION_BASE)])
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='trigger'"
+                )
+                rolled_back_trigger_names = {row[0] for row in cursor.fetchall()}
+            self.assertTrue(
+                {
+                    'financeiro_despesa_rec_criado_em_guard',
+                    'financeiro_lanc_recorrente_origin_guard',
+                    'financeiro_lanc_competencia_insert_guard',
+                    'financeiro_lanc_competencia_update_guard',
+                    'financeiro_lanc_identity_guard',
+                    'financeiro_lanc_recorrente_delete_guard',
+                }.issubset(rolled_back_trigger_names)
+            )
             executor = MigrationExecutor(connection)
             executor.migrate([('financeiro', self.MIGRATION_NAME)])
             with connection.cursor() as cursor:
