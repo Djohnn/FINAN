@@ -54,6 +54,15 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             sql=[
                 """
+                CREATE TRIGGER financeiro_despesa_rec_criado_em_guard
+                BEFORE UPDATE OF criado_em ON financeiro_despesarecorrente
+                FOR EACH ROW
+                WHEN OLD.criado_em IS NOT NEW.criado_em
+                BEGIN
+                    SELECT RAISE(ABORT, 'recurring expense created_at is immutable');
+                END;
+                """,
+                """
                 CREATE TRIGGER financeiro_lanc_recorrente_origin_guard
                 BEFORE INSERT ON financeiro_lancamentofinanceiro
                 FOR EACH ROW
@@ -132,6 +141,7 @@ class Migration(migrations.Migration):
                 """,
             ],
             reverse_sql=[
+                'DROP TRIGGER IF EXISTS financeiro_despesa_rec_criado_em_guard;',
                 'DROP TRIGGER IF EXISTS financeiro_lanc_recorrente_origin_guard;',
                 'DROP TRIGGER IF EXISTS financeiro_lanc_competencia_insert_guard;',
                 'DROP TRIGGER IF EXISTS financeiro_lanc_competencia_update_guard;',

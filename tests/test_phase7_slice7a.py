@@ -144,6 +144,34 @@ class DespesaRecorrenteModelTests(TestCase):
 
         recorrencia.refresh_from_db()
         self.assertEqual(recorrencia.criado_em, criado_em)
+        self.assertEqual(
+            DespesaRecorrente.objects.filter(pk=recorrencia.pk).update(
+                criado_em=criado_em,
+            ),
+            1,
+        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                DespesaRecorrente.objects.filter(pk=recorrencia.pk).update(
+                    criado_em=criado_em - timedelta(days=1),
+                )
+        recorrencia.refresh_from_db()
+        self.assertEqual(recorrencia.criado_em, criado_em)
+
+        raw = connection.connection
+        table = connection.ops.quote_name(DespesaRecorrente._meta.db_table)
+        with self.assertRaises(sqlite3.IntegrityError):
+            raw.execute(
+                f'UPDATE {table} SET criado_em = ? WHERE id = ?',
+                ('2026-10-14 15:00:00', recorrencia.pk),
+            )
+        self.assertEqual(
+            raw.execute(
+                f'SELECT criado_em FROM {table} WHERE id = ?',
+                (recorrencia.pk,),
+            ).fetchone()[0],
+            criado_em.astimezone(UTC).replace(tzinfo=None),
+        )
 
 
 class LedgerRecurrenceModelTests(TestCase):
@@ -740,6 +768,14 @@ class Phase7MigrationTests(TransactionTestCase):
                 self.assertEqual(
                     cursor.fetchone()[0],
                     'financeiro_lanc_recorrente_origin_guard',
+                )
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='trigger' "
+                    "AND name='financeiro_despesa_rec_criado_em_guard'"
+                )
+                self.assertEqual(
+                    cursor.fetchone()[0],
+                    'financeiro_despesa_rec_criado_em_guard',
                 )
 
             executor = MigrationExecutor(connection)
