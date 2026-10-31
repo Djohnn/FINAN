@@ -5,6 +5,7 @@ from . import views
 app_name = "kanban_projetos"
 
 urlpatterns = [
+    path("kanban/etapas/ordem/", views.stage_order_update, name="stage_order_update"),
     path("kanban/", views.kanban_readonly_view, name="kanban_readonly"),
     path(
         "kanban/etapas/<str:codigo_interno>/label/",

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ customer.nome }} · Clientes | FinanPE{% endblock %}
+
+{% block styles %}
+    <link rel="stylesheet" href="{% static 'clientes_agenda/customer360.css' %}">
+{% endblock %}
+
+{% block header_nav %}
+    <nav class="site-nav" aria-label="Navegação principal">
+        <a class="site-nav__link site-nav__link--active" href="{% url 'clientes_agenda:clientes' %}">Clientes</a>
+    </nav>
+{% endblock %}
+
+{% block content %}
+    <div class="customer-shell">
+        <nav class="customer-breadcrumb" aria-label="Breadcrumb">
+            <a href="{% url 'clientes_agenda:clientes' %}">Clientes</a>
+            <span aria-hidden="true">/</span>
+            <span>Visão do cliente</span>
+        </nav>
+
+        <header class="customer-hero">
+            <div class="customer-hero__heading">
+                <div>
+                    <h1>{{ customer.nome }}</h1>
+                    <p>Cliente desde {{ customer.criado_em|date:"d/m/Y" }} · Visão 360°</p>
+                </div>
+                <span class="readonly-badge">Somente consulta</span>
+            </div>
+            <div class="customer-hero__facts">
+                <div><span>WhatsApp / telefone</span><strong>{{ customer.whatsapp }}</strong></div>
+                <div><span>Endereço</span><strong>{{ customer.endereco|default:"Não informado" }}</strong></div>
+                <div><span>Observações</span><strong>{{ customer.observacoes|default:"Nenhuma observação registrada." }}</strong></div>
+            </div>
+        </header>
+
+        <section class="customer-financial" aria-labelledby="financial-title">
+            <div class="customer-section-heading">
+                <div><h2 id="financial-title">Resumo financeiro</h2><p>Contratos e recebimentos dos projetos do cliente</p></div>
+            </div>
+            {% if financial.state == "INCONSISTENTE" %}
+                <div class="financial-unavailable" role="alert">
+                    <h3>Resumo financeiro indisponível</h3>
+                    <p>Existe uma inconsistência financeira em um dos projetos deste cliente. Consulte os projetos para verificar os dados.</p>
+                    <a href="#customer-projects">Ver projetos do cliente</a>
+                </div>
+            {% else %}
+                <div class="financial-summary" aria-label="Resumo financeiro do cliente">
+                    <div class="financial-summary__item financial-summary__item--primary"><span>Saldo a receber</span><strong>{{ financial.receivable }}</strong><small>Valor pendente nos contratos</small></div>
+                    <div class="financial-summary__item"><span>Total recebido</span><strong>{{ financial.received }}</strong><small>Recebimentos dos projetos</small></div>
+                    <div class="financial-summary__item"><span>Total contratado</span><strong>{{ financial.contracted }}</strong><small>Projetos com contrato definido</small></div>
+                </div>
+                {% if financial.warnings %}
+                    <div class="financial-warnings" role="status">
+                        <strong>Há avisos nos dados financeiros.</strong>
+                        {% for warning in financial.warnings %}<span>{{ warning }}</span>{% endfor %}
+                    </div>
+                {% endif %}
+            {% endif %}
+        </section>
+
+        <nav class="customer-tabs" aria-label="Seções do cliente">
+            <a href="#customer-projects">Projetos ({{ projects|length }})</a>
+            <a href="#customer-agenda">Agenda</a>
+            <a href="#customer-completed">Contatos concluídos</a>
+            <a href="#customer-history">Histórico</a>
+        </nav>
+
+        <div class="customer-columns">
+            <div class="customer-main-column">
+                <section id="customer-projects" class="customer-section" aria-labelledby="projects-title">
+                    <div class="customer-section-heading"><div><h2 id="projects-title">Projetos ({{ projects|length }})</h2><p>Inclui arquivados e sem contrato</p></div></div>
+                    <div class="project-list">
+                        {% for item in projects %}
+                            <article id="projeto-{{ item.project.projeto_id }}" class="project-card{% if item.project.arquivado %} project-card--archived{% endif %}">
+                                <div class="project-card__heading"><h3>{{ item.project.titulo }}</h3><span class="stage-badge">{{ item.project.etapa_label }}</span></div>
+                                <div class="project-card__dates">
+                                    {% if item.project.data_inicio_producao %}<span>Início: {{ item.project.data_inicio_producao|date:"d/m/Y" }}</span>{% endif %}
+                                    {% if item.project.data_entrega_prevista %}<span>Entrega prevista: {{ item.project.data_entrega_prevista|date:"d/m/Y" }}</span>{% endif %}
+                                    {% if item.project.data_entrega_realizada %}<span>Entrega realizada: {{ item.project.data_entrega_realizada|date:"d/m/Y" }}</span>{% endif %}
+                                    {% if item.project.data_limite_orcamento %}<span>Prazo do orçamento: {{ item.project.data_limite_orcamento|date:"d/m/Y" }}</span>{% endif %}
+                                </div>
+                                {% if item.project.arquivado %}<p class="project-card__archive-reason"><strong>Motivo do arquivamento:</strong> {{ item.project.motivo_arquivamento_label|default:"Não informado" }}{% if item.project.observacao_arquivamento %} · {{ item.project.observacao_arquivamento }}{% endif %}</p>{% endif %}
+                                {% if item.project.financeiro.estado == "INCONSISTENTE" %}
+                                    <p class="project-card__warning">Dados financeiros inconsistentes. Os valores deste projeto estão ocultos.</p>
+                                {% elif item.project.financeiro.estado == "SEM_CONTRATO" %}
+                                    <p class="project-card__no-contract">Sem contrato · valores contratados ainda não definidos.</p>
+                                {% else %}
+                                    <dl class="project-card__metrics"><div><dt>Contratado</dt><dd>{{ item.contracted }}</dd></div><div><dt>Recebido</dt><dd>{{ item.received }}</dd></div><div><dt>A receber</dt><dd>{{ item.receivable }}</dd></div></dl>
+                                    {% if item.project.financeiro.warnings %}<div class="project-card__warning-list">{% for warning in item.project.financeiro.warnings %}<span>{{ warning }}</span>{% endfor %}</div>{% endif %}
+                                {% endif %}
+                                <div class="project-card__links">
+                                    <a href="{% url 'kanban_projetos:kanban_readonly' %}#projeto-{{ item.project.projeto_id }}">Abrir projeto</a>
+                                    {% if item.project.financeiro.estado != "SEM_CONTRATO" %}<a href="{% url 'financeiro:central_contas_receber' %}?projeto={{ item.project.projeto_id }}">Abrir cobrança</a>{% endif %}
+                                    <a href="{% url 'financeiro:rentabilidade_projeto' projeto_id=item.project.projeto_id %}">Ver rentabilidade</a>
+                                    <a href="{% url 'clientes_agenda:cliente_project_whatsapp' cliente_id=customer.cliente_id projeto_id=item.project.projeto_id %}">Falar sobre este projeto · WhatsApp</a>
+                                </div>
+                            </article>
+                        {% empty %}<p class="customer-empty-inline">Este cliente ainda não possui projetos.</p>{% endfor %}
+                    </div>
+                </section>
+            </div>
+
+            <aside class="customer-side-column">
+                <section id="customer-agenda" class="customer-section" aria-labelledby="agenda-title">
+                    <div class="customer-section-heading"><h2 id="agenda-title">Relacionamento / agenda</h2></div>
+                    <div class="agenda-card agenda-card--pending">
+                        <h3>Pendentes vencidos / hoje</h3>
+                        {% for item in overdue_contacts %}
+                            <article class="contact-row"><strong>{{ item.contact.data_agendada|date:"d/m/Y" }}</strong><span>{{ item.contact.tipo_label }}</span><small>{{ item.contact.projeto_titulo|default:"Contato do cliente" }}</small><a href="{% url 'clientes_agenda:cliente_contact_whatsapp' cliente_id=customer.cliente_id contato_id=item.contact.contato_id %}">Falar sobre este contato · WhatsApp</a></article>
+                        {% empty %}<p>Nenhuma pendência vencida ou para hoje.</p>{% endfor %}
+                    </div>
+                    <div class="agenda-card">
+                        <h3>Próximos contatos</h3>
+                        {% for item in future_contacts %}<article class="contact-row"><strong>{{ item.contact.data_agendada|date:"d/m/Y" }}</strong><span>{{ item.contact.tipo_label }}</span><small>{{ item.contact.projeto_titulo|default:"Contato do cliente" }}</small><a href="{% url 'clientes_agenda:cliente_contact_whatsapp' cliente_id=customer.cliente_id contato_id=item.contact.contato_id %}">Falar sobre este contato · WhatsApp</a></article>{% empty %}<p>Nenhum próximo contato agendado.</p>{% endfor %}
+                    </div>
+                </section>
+
+                <section id="customer-completed" class="customer-section" aria-labelledby="completed-title">
+                    <div class="customer-section-heading"><h2 id="completed-title">Contatos concluídos / pós-venda</h2></div>
+                    <div class="completed-list">
+                        {% for item in completed_contacts %}<article class="completed-card"><strong>{{ item.contact.tipo_label }}</strong><span>{{ item.contact.data_agendada|date:"d/m/Y" }} · {{ item.contact.projeto_titulo|default:"Contato do cliente" }}</span>{% if item.contact.nivel_satisfacao_label %}<b>{{ item.contact.nivel_satisfacao_label }}</b>{% endif %}{% if item.contact.feedback_cliente %}<p>{{ item.contact.feedback_cliente }}</p>{% endif %}</article>{% empty %}<p class="customer-empty-inline">Nenhum contato concluído registrado.</p>{% endfor %}
+                    </div>
+                </section>
+            </aside>
+        </div>
+
+        <section id="customer-history" class="customer-section customer-history" aria-labelledby="history-title" data-history-container>
+            <div class="customer-section-heading"><div><h2 id="history-title">Histórico do cliente</h2><p>Eventos comerciais e financeiros relevantes</p></div></div>
+            {% include "clientes_agenda/_historico.html" %}
+        </section>
+
+        <footer class="customer-footer">FinanPE · Customer 360 · nenhuma alteração de dados ou envio de mensagens nesta consulta</footer>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{% static 'clientes_agenda/customer360.js' %}"></script>
+{% endblock %}

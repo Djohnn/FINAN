@@ -1,0 +1,12 @@
+<div class="history-panel">
+    <p class="history-panel__intro">Mostrando eventos mais recentes · primeira carga limitada aos últimos 50.</p>
+    <div class="history-items" data-history-items aria-live="polite">
+        {% for event in customer.eventos %}
+            <article class="history-item" data-history-event>
+                <time datetime="{{ event.criado_em|date:'c' }}">{{ event.criado_em|date:"d/m/Y · H:i" }}</time>
+                <div><strong>{{ event.tipo_label }}</strong><span>{{ event.descricao }}</span></div>
+            </article>
+        {% empty %}<p class="customer-empty-inline">Nenhum evento relevante registrado.</p>{% endfor %}
+    </div>
+    {% if customer.history_has_more %}<a class="button button--secondary history-load-more" data-history-next href="{{ history_url }}?pagina={{ customer.history_next_page }}">Carregar mais</a>{% endif %}
+</div>

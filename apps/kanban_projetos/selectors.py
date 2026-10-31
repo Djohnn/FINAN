@@ -34,11 +34,22 @@ def get_kanban_stage_labels() -> tuple[KanbanStageLabel, ...]:
     from .models import ConfiguracaoEtapaKanban
 
     defaults = get_kanban_stage_defaults()
-    overrides = dict(
+    configurations = list(
         ConfiguracaoEtapaKanban.objects.filter(
             codigo_interno__in=[stage.codigo_interno for stage in defaults],
-        ).values_list("codigo_interno", "label_personalizado")
+        ).values_list("codigo_interno", "label_personalizado", "posicao_visual")
     )
+    overrides = {code: label for code, label, _position in configurations}
+    flow_defaults = [stage for stage in defaults if stage.codigo_interno != ARCHIVED_STAGE_CODE]
+    positions = {code: position for code, _label, position in configurations if code != ARCHIVED_STAGE_CODE}
+    # Only a complete permutation is trusted; legacy/partial/corrupt data uses defaults.
+    if (
+        set(positions) == {stage.codigo_interno for stage in flow_defaults}
+        and set(positions.values()) == set(range(len(flow_defaults)))
+    ):
+        defaults = tuple(sorted(flow_defaults, key=lambda stage: positions[stage.codigo_interno])) + tuple(
+            stage for stage in defaults if stage.codigo_interno == ARCHIVED_STAGE_CODE
+        )
     return tuple(
         KanbanStageLabel(
             codigo_interno=stage.codigo_interno,

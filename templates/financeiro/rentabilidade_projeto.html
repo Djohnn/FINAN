@@ -39,6 +39,8 @@
             <span class="detail-notice__mark" aria-hidden="true">{{ project.notice_mark }}</span>
             <div>
                 <strong>{{ project.notice_title }}</strong>
+                {% if project.negative_badge %}<span class="negative-badge">{{ project.negative_badge }}</span>{% endif %}
+                {% if project.inconsistent %}<p><strong>Dados financeiros inconsistentes</strong> · Abra o detalhe para ver os avisos. Números ocultos.</p>{% endif %}
                 <p>{{ project.notice_copy }}</p>
                 {% if project.warning_codes %}
                     <div class="integrity-codes" aria-label="Códigos de integridade">

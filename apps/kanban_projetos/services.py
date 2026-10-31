@@ -51,6 +51,47 @@ def salvar_label_etapa_service(
 
 
 @transaction.atomic
+def salvar_ordem_etapas_service(*, codigos: list[str] | None = None, restaurar_padrao: bool = False):
+    """Persist a complete visual permutation without mutating labels or projects."""
+    from .models import ConfiguracaoEtapaKanban
+    from .selectors import ARCHIVED_STAGE_CODE, get_kanban_stage_defaults
+
+    default_codes = [
+        stage.codigo_interno for stage in get_kanban_stage_defaults()
+        if stage.codigo_interno != ARCHIVED_STAGE_CODE
+    ]
+    if restaurar_padrao:
+        ConfiguracaoEtapaKanban.objects.filter(codigo_interno__in=default_codes).update(
+            posicao_visual=None, atualizado_em=timezone.now(),
+        )
+        return
+    if (
+        not isinstance(codigos, (list, tuple))
+        or any(not isinstance(code, str) for code in codigos)
+        or len(codigos) != len(default_codes)
+        or set(codigos) != set(default_codes)
+    ):
+        raise ValidationError("Informe exatamente uma vez cada uma das seis etapas do fluxo, sem a Geladeira.")
+
+    # The first database operation is a write. SQLite serializes writers before any
+    # read; every writer takes row locks in canonical order on databases with locks.
+    ConfiguracaoEtapaKanban.objects.bulk_create(
+        [ConfiguracaoEtapaKanban(codigo_interno=code) for code in default_codes],
+        ignore_conflicts=True,
+    )
+    configurations = list(
+        ConfiguracaoEtapaKanban.objects.select_for_update()
+        .filter(codigo_interno__in=default_codes).order_by("codigo_interno")
+    )
+    positions = {code: index for index, code in enumerate(codigos)}
+    now = timezone.now()
+    for configuration in configurations:
+        configuration.posicao_visual = positions[configuration.codigo_interno]
+        configuration.atualizado_em = now
+    ConfiguracaoEtapaKanban.objects.bulk_update(configurations, ["posicao_visual", "atualizado_em"])
+
+
+@transaction.atomic
 def aprovar_orcamento_service(
     projeto_id: int,
     valor_total: Decimal | float | str,

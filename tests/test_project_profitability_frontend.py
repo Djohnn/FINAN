@@ -127,6 +127,49 @@ class ProjectProfitabilityFrontendTests(TestCase):
         self.assertNotContains(response, "internal selector failure", status_code=500)
         self.assertNotContains(response, "R$ 18.500,00", status_code=500)
 
+    def test_overview_filters_by_project_or_customer_stage_and_state_with_count(self):
+        results = (
+            make_result(project_id=31, title="Closet sob medida", stage="4_PRODUCAO"),
+            make_result(project_id=32, title="Cozinha", stage="9_ARQUIVADO", state="SEM_CONTRATO", contract="0.00", margin=None),
+        )
+        with patch("apps.financeiro.views.rentabilidade_projetos", return_value=ProjetosRentabilidade(results)), patch(
+            "apps.financeiro.views.rentabilidade_clientes",
+            return_value={31: "Cliente Norte", 32: "Cliente Sul"},
+        ):
+            response = self.client.get(self.overview_url, {"q": "Cliente Sul", "etapa": "9_ARQUIVADO", "estado": "SEM_CONTRATO"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "1 de 2 projetos exibidos")
+        self.assertContains(response, "Cozinha")
+        self.assertNotContains(response, "Closet sob medida")
+
+    def test_overview_shows_received_receivable_and_realized_cash(self):
+        response, _selectors = self.render_overview((make_result(),))
+
+        self.assertContains(response, "Valor recebido")
+        self.assertContains(response, "Saldo a receber")
+        self.assertContains(response, "Caixa líquido realizado")
+        self.assertContains(response, "R$ 11.000,00")
+        self.assertContains(response, "R$ 7.500,00")
+        self.assertContains(response, "R$ 4.800,00")
+
+    def test_overview_metrics_follow_approved_visual_hierarchy(self):
+        response, _selectors = self.render_overview((make_result(),))
+        content = response.content.decode()
+        metrics_start = content.index('<div class="project-metrics">')
+
+        labels = (
+            "Lucro direto",
+            "Margem direta",
+            "Custos diretos",
+            "Valor contratado",
+            "Saldo a receber",
+            "Valor recebido",
+            "Caixa líquido realizado",
+        )
+        positions = tuple(content.index(label, metrics_start) for label in labels)
+        self.assertEqual(positions, tuple(sorted(positions)))
+
     def test_named_detail_route_renders_read_only_screen(self):
         response, _selector = self.render_detail(make_result())
 
@@ -217,7 +260,7 @@ class ProjectProfitabilityFrontendTests(TestCase):
 
         self.assertEqual(labels[21], "Resultado positivo")
         self.assertEqual(labels[22], "Sem lucro nem prejuízo direto")
-        self.assertEqual(labels[23], "Prejuízo direto")
+        self.assertEqual(labels[23], "Resultado negativo")
         self.assertContains(response, "Sem lucro nem prejuízo direto")
 
     def test_overview_applies_sem_contrato_state_precedence(self):
@@ -265,7 +308,7 @@ class ProjectProfitabilityFrontendTests(TestCase):
         self.assertEqual(rows[24]["outcome_label"], "Sem contrato · custos já registrados")
         self.assertNotEqual(rows[24]["outcome_label"], "Prejuízo direto")
         self.assertEqual(rows[25]["outcome_label"], "Sem contrato")
-        self.assertEqual(rows[26]["outcome_label"], "Prejuízo direto")
+        self.assertEqual(rows[26]["outcome_label"], "Resultado negativo")
         self.assertEqual(rows[27]["outcome_label"], "Resultado indisponível")
         self.assertEqual(rows[27]["contracted"], "Não disponível")
         self.assertEqual(rows[27]["direct_costs"], "Não disponível")
@@ -295,7 +338,8 @@ class ProjectProfitabilityFrontendTests(TestCase):
 
         self.assertContains(response, "− R$ 2.550,00")
         self.assertContains(response, "−20,6%")
-        self.assertContains(response, "prejuízo direto")
+        self.assertContains(response, "Resultado negativo")
+        self.assertContains(response, "Atenção · prejuízo")
 
     def test_sem_contrato_keeps_costs_and_marks_margin_unavailable(self):
         result = make_result(
@@ -318,7 +362,8 @@ class ProjectProfitabilityFrontendTests(TestCase):
         response, _selector = self.render_detail(result)
 
         self.assertContains(response, "Sem contrato")
-        self.assertContains(response, "Não calculada")
+        self.assertContains(response, "Não calculado sem contrato")
+        self.assertContains(response, "—")
         self.assertContains(response, "não representa uma margem final de projeto contratado")
         self.assertContains(response, "R$ 650,00")
 
@@ -342,6 +387,8 @@ class ProjectProfitabilityFrontendTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Inconsistente")
         self.assertContains(response, "Resultado indisponível por inconsistência")
+        self.assertContains(response, "Dados financeiros inconsistentes")
+        self.assertContains(response, "Abra o detalhe para ver os avisos")
         self.assertContains(response, "Não disponível")
         self.assertContains(response, "Há um lançamento pago sem data de pagamento")
         self.assertNotContains(response, "R$ 18.500,00")
@@ -403,8 +450,21 @@ class ProjectProfitabilityFrontendTests(TestCase):
         response, _selectors = self.render_overview(())
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Nenhum projeto cadastrado")
         self.assertContains(response, "Quando ainda não houver projetos")
         self.assertContains(response, "Projetos sem contrato continuam visíveis")
+
+    def test_filtered_overview_has_distinct_empty_state_when_portfolio_exists(self):
+        result = make_result(title="Projeto existente")
+        with patch("apps.financeiro.views.rentabilidade_projetos", return_value=ProjetosRentabilidade((result,))), patch(
+            "apps.financeiro.views.rentabilidade_clientes", return_value={result.projeto_id: "Cliente Real"}
+        ):
+            response = self.client.get(self.overview_url, {"q": "não encontrado"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Nenhum projeto encontrado")
+        self.assertContains(response, "Ajuste os filtros para ver outros projetos.")
+        self.assertNotContains(response, "Nenhum projeto cadastrado")
 
     def test_xss_content_is_escaped_by_template(self):
         result = make_result(title="<script>alert('x')</script>")
