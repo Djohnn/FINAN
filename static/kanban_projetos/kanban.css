@@ -518,6 +518,19 @@ button:focus-visible {
 }
 
 @media (max-width: 520px) {
+    .kanban-status {
+        box-sizing: border-box;
+        max-width: 100%;
+        white-space: normal;
+    }
+
+    .kanban-status__icon { flex-shrink: 0; }
+
+    .kanban-status > span:last-child {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
     .kanban-board { grid-template-columns: minmax(0, 1fr); }
     .section-heading { align-items: flex-start; flex-direction: column; gap: 8px; }
 }

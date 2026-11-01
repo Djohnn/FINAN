@@ -19,7 +19,10 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
+from .views import favicon_view
+
 urlpatterns = [
+    path('favicon.ico', favicon_view, name='favicon'),
     path('admin/', admin.site.urls),
     path('clientes/', include('apps.clientes_agenda.urls')),
     path('projetos/', include('apps.kanban_projetos.urls')),
