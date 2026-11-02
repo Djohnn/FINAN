@@ -1,0 +1,16 @@
+# Dependencies for isolated static analysis and Django tests only.
+# This file does not replace the application's production dependency set.
+asgiref==3.13.0
+ast_serialize==0.13.1
+Django==6.0.7
+django-stubs==6.0.7
+django-stubs-ext==6.1.2
+librt==0.16.0
+mypy==2.4.1
+mypy_extensions==1.1.0
+pathspec==1.1.1
+ruff==0.17.3
+sqlparse==0.6.1
+types-PyYAML==6.0.12.20261030
+typing_extensions==4.16.0
+tzdata==2026.6

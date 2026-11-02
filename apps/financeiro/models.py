@@ -1,4 +1,5 @@
 from decimal import Decimal, InvalidOperation
+from typing import ClassVar
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -9,12 +10,14 @@ class LancamentoFinanceiro(models.Model):
     Contas a pagar e receber unificadas da marcenaria.
     Base de cálculo para o Semáforo Financeiro e Fechamento do Mês.
     """
-    TIPO_CHOICES = [
+    foi_criado: bool
+
+    TIPO_CHOICES: ClassVar[list[tuple[str, str]]] = [
         ('ENTRADA', 'Entrada'),
         ('SAIDA', 'Saída'),
     ]
 
-    CATEGORIA_CHOICES = [
+    CATEGORIA_CHOICES: ClassVar[list[tuple[str, str]]] = [
         ('SERVICO_CLIENTE', 'Serviço de Cliente'),
         ('FUNCIONARIO', 'Equipe / Funcionários'),
         ('MATERIA_PRIMA', 'Matéria-Prima'),
@@ -22,7 +25,7 @@ class LancamentoFinanceiro(models.Model):
         ('OUTROS', 'Outros'),
     ]
 
-    FORMA_PAGAMENTO_CHOICES = [
+    FORMA_PAGAMENTO_CHOICES: ClassVar[list[tuple[str, str]]] = [
         ('PIX', 'PIX'),
         ('CARTAO_CREDITO', 'Cartão de Crédito'),
         ('CARTAO_DEBITO', 'Cartão de Débito'),
@@ -30,7 +33,7 @@ class LancamentoFinanceiro(models.Model):
         ('BOLETO', 'Boleto'),
     ]
 
-    STATUS_CHOICES = [
+    STATUS_CHOICES: ClassVar[list[tuple[str, str]]] = [
         ('PENDENTE', 'Pendente'),
         ('PAGO', 'Pago'),
         ('CANCELADO', 'Cancelado'),
@@ -100,7 +103,7 @@ class LancamentoFinanceiro(models.Model):
     class Meta:
         verbose_name = "Lançamento Financeiro"
         verbose_name_plural = "Lançamentos Financeiros"
-        ordering = ["-data_vencimento", "-id"]
+        ordering: ClassVar[list[str]] = ["-data_vencimento", "-id"]
 
     @classmethod
     def validar_valor_monetario(cls, valor, *, permitir_zero=False) -> Decimal:
@@ -117,6 +120,7 @@ class LancamentoFinanceiro(models.Model):
             return valor
 
         field = cls._meta.get_field('valor')
+        assert isinstance(field, models.DecimalField)
         _sign, digits, exponent = valor.as_tuple()
         # Só dígitos não nulos além da escala exigiriam arredondamento.
         excess_places = -exponent - field.decimal_places

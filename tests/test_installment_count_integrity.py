@@ -110,7 +110,7 @@ class InstallmentCountIntegrityTests(TestCase):
             (1, 1),
             (2, 2),
             ('2', 2),
-            (Decimal('2'), 2),
+            (Decimal(2), 2),
             (Decimal('2.0'), 2),
             (2.0, 2),
         )

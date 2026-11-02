@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime, timezone
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -112,7 +112,7 @@ class AgendaContatoChoiceIntegrityTests(TestCase):
         }
 
     def test_invalid_type_update_rejects_and_preserves_persisted_state(self):
-        realizado_em = datetime(2026, 10, 20, 12, 30, tzinfo=timezone.utc)
+        realizado_em = datetime(2026, 10, 20, 12, 30, tzinfo=UTC)
         agenda = AgendaContato.objects.create(
             **self._agenda_kwargs(
                 tipo='RETORNO_ORCAMENTO',

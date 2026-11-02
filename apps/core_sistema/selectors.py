@@ -3,7 +3,7 @@ from .models import DominioEventoSistema, EventoSistema
 
 def _validate_limit(limit: int) -> int:
     if isinstance(limit, bool) or not isinstance(limit, int):
-        raise ValueError('limit deve ser um inteiro.')
+        raise TypeError('limit deve ser um inteiro.')
     if limit <= 0 or limit > 100:
         raise ValueError('limit deve estar entre 1 e 100.')
     return limit

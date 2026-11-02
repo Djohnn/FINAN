@@ -70,14 +70,14 @@ def _percent(numerator: Decimal, revenue: Decimal) -> Decimal | None:
     with localcontext() as context:
         context.prec = 28
         context.rounding = ROUND_HALF_EVEN
-        return numerator / revenue * Decimal('100')
+        return numerator / revenue * Decimal(100)
 
 
 def _rentabilidade_percent(numerator: Decimal, revenue: Decimal) -> Decimal | None:
     if revenue <= _ZERO:
         return None
     with localcontext(Context(prec=28, rounding=ROUND_HALF_EVEN)):
-        return numerator / revenue * Decimal('100')
+        return numerator / revenue * Decimal(100)
 
 
 def fechamento_mensal(*, ano: int, mes: int) -> FechamentoMensal:
@@ -89,11 +89,11 @@ def fechamento_mensal(*, ano: int, mes: int) -> FechamentoMensal:
     supplies employee identity/name without per-employee queries.
     """
     if isinstance(ano, bool) or not isinstance(ano, int):
-        raise ValueError('ano deve ser um inteiro.')
+        raise TypeError('ano deve ser um inteiro.')
     if not 1 <= ano <= 9999:
         raise ValueError('ano deve estar entre 1 e 9999.')
     if isinstance(mes, bool) or not isinstance(mes, int):
-        raise ValueError('mes deve ser um inteiro.')
+        raise TypeError('mes deve ser um inteiro.')
     if not 1 <= mes <= 12:
         raise ValueError('mes deve estar entre 1 e 12.')
 
@@ -129,9 +129,9 @@ def fechamento_mensal(*, ano: int, mes: int) -> FechamentoMensal:
     for row in rows:
         status = row['status']
         paid = row['data_pagamento']
-        cash = status == 'PAGO' and start <= paid <= end
+        cash = status == 'PAGO' and paid is not None and start <= paid <= end
         unpaid = row['data_vencimento'] <= end and (
-            status == 'PENDENTE' or (status == 'PAGO' and paid > end)
+            status == 'PENDENTE' or (status == 'PAGO' and paid is not None and paid > end)
         )
         if row['tipo'] not in types and (cash or unpaid):
             raise _invalid('tipo')
@@ -146,6 +146,7 @@ def fechamento_mensal(*, ano: int, mes: int) -> FechamentoMensal:
         raise _invalid('forma_pagamento')
 
     # A paid-later debt cannot also be realized in this month.
+    amount_by_row: dict[int, int] = {}
     for row in realized + debts:
         if not row['exact_cents']:
             raise _invalid('valor')
@@ -160,25 +161,25 @@ def fechamento_mensal(*, ano: int, mes: int) -> FechamentoMensal:
         cents, remainder = divmod(numerator * 100, denominator)
         if remainder:
             raise _invalid('valor')
-        row['amount'] = cents
+        amount_by_row[id(row)] = cents
 
     by_form = dict.fromkeys(_FORMS, 0)
     employee_totals: dict[int | None, int] = {}
     employee_names: dict[int | None, str] = {}
     other = 0
     for row in realized:
-        amount = row['amount']
+        amount_cents = amount_by_row[id(row)]
         if row['tipo'] == 'ENTRADA':
-            by_form[row['forma_pagamento']] += amount
+            by_form[row['forma_pagamento']] += amount_cents
         elif row['categoria'] == 'FUNCIONARIO':
             employee_id = row['funcionario_id']
-            employee_totals[employee_id] = employee_totals.get(employee_id, 0) + amount
+            employee_totals[employee_id] = employee_totals.get(employee_id, 0) + amount_cents
             employee_names[employee_id] = (
                 row['funcionario__nome'] if employee_id is not None
                 else 'Sem funcionário vinculado'
             )
         else:
-            other += amount
+            other += amount_cents
 
     employees = tuple(sorted(
         (CustoFuncionario(key, employee_names[key], _money(total))
@@ -189,7 +190,7 @@ def fechamento_mensal(*, ano: int, mes: int) -> FechamentoMensal:
     revenue = sum(by_form.values())
     employee_total = sum(employee_totals.values())
     balance = revenue - employee_total - other
-    debt_total = sum(row['amount'] for row in debts)
+    debt_total = sum(amount_by_row[id(row)] for row in debts)
     color: Literal['VERDE', 'AMARELO', 'VERMELHO'] = 'AMARELO'
     if balance < 0:
         color = 'VERMELHO'
@@ -282,6 +283,7 @@ def central_contas_receber(*, data_referencia: date) -> CentralContasReceber:
         raise ValueError(prefix + 'tipo inválido em lançamento relevante.')
 
     active = [r for r in rows if r['tipo'] == 'ENTRADA' and r['status'] == 'PENDENTE']
+    cents_by_row: dict[int, int] = {}
     for row in active:
         try:
             if not row['exact_cents']:
@@ -297,14 +299,14 @@ def central_contas_receber(*, data_referencia: date) -> CentralContasReceber:
                 raise ValidationError('Centavos inexatos.')
         except ValidationError:
             raise ValueError(prefix + 'valor monetário inválido em lançamento relevante.') from None
-        row['cents'] = cents
+        cents_by_row[id(row)] = cents
 
     receivables = []
     total = overdue = 0
     overdue_customers: set[int] = set()
     maximum = None
     for row in active:
-        cents = row['cents']
+        cents = cents_by_row[id(row)]
         delta = (row['data_vencimento'] - data_referencia).days
         classification: ClassificacaoRecebivel = (
             'ATRASADO' if delta < 0 else 'VENCE_HOJE' if delta == 0 else 'A_VENCER'
@@ -400,7 +402,9 @@ _RENTABILIDADE_ETAPAS = (
 _RENTABILIDADE_ETAPA_RANK = {
     etapa: rank for rank, etapa in enumerate(_RENTABILIDADE_ETAPAS)
 }
-_RENTABILIDADE_CATEGORIAS_DIRETAS = ('MATERIA_PRIMA', 'FUNCIONARIO', 'OUTROS')
+_RENTABILIDADE_CATEGORIAS_DIRETAS: tuple[
+    Literal['MATERIA_PRIMA', 'FUNCIONARIO', 'OUTROS'], ...
+] = ('MATERIA_PRIMA', 'FUNCIONARIO', 'OUTROS')
 _RENTABILIDADE_AVISOS = (
     'CONTRATO_DIVERGE_DO_LEDGER',
     'PENDENTE_COM_DATA_PAGAMENTO',
@@ -597,7 +601,7 @@ def _rentabilidade_project_result(project_row: dict, ledger_rows: list[dict]) ->
         )
 
     assert contract_cents is not None
-    categories = tuple(
+    direct_costs = tuple(
         CustoDiretoProjeto(
             categoria=category,
             total=_money(category_totals[category]['pendente'] + category_totals[category]['pago']),
@@ -631,7 +635,7 @@ def _rentabilidade_project_result(project_row: dict, ledger_rows: list[dict]) ->
         valor_contratado=contract,
         valor_recebido=received,
         saldo_a_receber=pending,
-        custos_diretos_por_categoria=categories,
+        custos_diretos_por_categoria=direct_costs,
         custos_diretos=direct,
         lucro_direto=profit,
         margem_direta_percentual=_rentabilidade_percent(profit, contract),

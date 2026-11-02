@@ -1,9 +1,7 @@
-from django.core.management.base import BaseCommand
-from django.core.management.base import CommandError
+from django.core.management.base import BaseCommand, CommandError
 
 from apps.core_sistema.models import ConfiguracaoSistema
-from apps.core_sistema.services import executar_backup_pendrive
-from apps.core_sistema.services import backup_realizado_hoje
+from apps.core_sistema.services import backup_realizado_hoje, executar_backup_pendrive
 
 
 class Command(BaseCommand):

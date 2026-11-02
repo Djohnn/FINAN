@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal, TypedDict
 
 from django.db.models import Count, OuterRef, Q, Subquery
 
@@ -15,6 +15,27 @@ from apps.kanban_projetos.models import ProjetoKanban
 from .models import AgendaContato, Cliente
 
 HistoryState = Literal["DISPONIVEL", "INCONSISTENTE", "SEM_CONTRATO"]
+
+
+class _ContactHistoryRow(TypedDict):
+    id: int
+    tipo: str
+    projeto_id: int | None
+    projeto__titulo_servico: str | None
+    data_agendada: date
+    realizado: bool
+    nivel_satisfacao: str
+    feedback_cliente: str
+    realizado_em: datetime | None
+
+
+class _EventHistoryRow(TypedDict):
+    id: int
+    tipo: str
+    criado_em: datetime
+    entidade_tipo: str | None
+    entidade_id: str | None
+    metadata: Any
 
 _HISTORY_PAGE_SIZE = 50
 _ZERO = Decimal("0.00")
@@ -293,7 +314,7 @@ def clientes_index(*, query: str, data_referencia: date) -> ClientesIndex:
     )
 
 
-def _contact_context(row: dict) -> ContatoCliente360:
+def _contact_context(row: _ContactHistoryRow) -> ContatoCliente360:
     return ContatoCliente360(
         contato_id=row["id"],
         tipo=row["tipo"],
@@ -318,17 +339,26 @@ def _completed_sort_key(contact: ContatoCliente360):
     return (0, contact.data_agendada, contact.contato_id)
 
 
+def _event_entity_id_as_int(entity_id: str | None) -> int:
+    if entity_id is None:
+        raise TypeError(
+            "int() argument must be a string, a bytes-like object or a real number, "
+            "not 'NoneType'"
+        )
+    return int(entity_id)
+
+
 def _event_project_id(
-    row: dict,
+    row: _EventHistoryRow,
     contact_project_ids: dict[int, int | None],
     ledger_project_ids: dict[int, int],
 ) -> int | None:
     if row["entidade_tipo"] == "ProjetoKanban":
-        return int(row["entidade_id"])
+        return _event_entity_id_as_int(row["entidade_id"])
     if row["entidade_tipo"] == "AgendaContato":
-        return contact_project_ids.get(int(row["entidade_id"]))
+        return contact_project_ids.get(_event_entity_id_as_int(row["entidade_id"]))
     if row["entidade_tipo"] == "LancamentoFinanceiro":
-        return ledger_project_ids.get(int(row["entidade_id"]))
+        return ledger_project_ids.get(_event_entity_id_as_int(row["entidade_id"]))
     if row["tipo"] == "PAGAMENTO_FUNCIONARIO_CRIADO":
         try:
             return ledger_project_ids.get(int(row["metadata"].get("lancamento_id")))
@@ -337,7 +367,7 @@ def _event_project_id(
     return None
 
 
-def _event_description(row: dict, project_title: str | None) -> str:
+def _event_description(row: _EventHistoryRow, project_title: str | None) -> str:
     project_title = project_title or "Contato do cliente"
     if row["tipo"] == "ORCAMENTO_ARQUIVADO":
         reason = row["metadata"].get("motivo_codigo")
@@ -400,7 +430,7 @@ def _load_events(
     for row in rows:
         project_id = _event_project_id(row, contact_project_ids, ledger_project_ids)
         if row["entidade_tipo"] == "AgendaContato":
-            contact_id = int(row["entidade_id"])
+            contact_id = _event_entity_id_as_int(row["entidade_id"])
             if contact_id not in contact_project_ids:
                 continue
         elif project_id is None or project_id not in project_titles:
@@ -411,9 +441,16 @@ def _load_events(
             tipo_label=_EVENT_LABELS[row["tipo"]],
             criado_em=row["criado_em"],
             projeto_id=project_id,
-            projeto_titulo=project_titles.get(project_id),
-            contato_id=(int(row["entidade_id"]) if row["entidade_tipo"] == "AgendaContato" else None),
-            descricao=_event_description(row, project_titles.get(project_id)),
+            projeto_titulo=(
+                project_titles.get(project_id) if project_id is not None else None
+            ),
+            contato_id=(
+                _event_entity_id_as_int(row["entidade_id"])
+                if row["entidade_tipo"] == "AgendaContato" else None
+            ),
+            descricao=_event_description(
+                row, project_titles.get(project_id) if project_id is not None else None
+            ),
         ))
     return tuple(events), has_more
 
@@ -449,7 +486,20 @@ def cliente_360(*, cliente_id: int, data_referencia: date, history_page: int = 1
             "realizado", "nivel_satisfacao", "feedback_cliente", "realizado_em",
         )
     )
-    contacts = tuple(_contact_context(row) for row in contacts_rows)
+    contacts = tuple(
+        _contact_context({
+            "id": row["id"],
+            "tipo": row["tipo"],
+            "projeto_id": row["projeto_id"],
+            "projeto__titulo_servico": row["projeto__titulo_servico"],
+            "data_agendada": row["data_agendada"],
+            "realizado": row["realizado"],
+            "nivel_satisfacao": row["nivel_satisfacao"],
+            "feedback_cliente": row["feedback_cliente"],
+            "realizado_em": row["realizado_em"],
+        })
+        for row in contacts_rows
+    )
     contact_project_ids = {contact.contato_id: contact.projeto_id for contact in contacts}
     all_financial = {
         result.projeto_id: result

@@ -4,7 +4,6 @@ from pathlib import Path
 
 from django.test import SimpleTestCase
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER_PATH = REPOSITORY_ROOT / 'scripts_windows' / 'Iniciar_Sistema_Marcenaria.bat'
 

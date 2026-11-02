@@ -316,13 +316,18 @@ def _integrity_labels(row: RecebivelCentral) -> tuple[str, ...]:
 
 def _present_row(row: RecebivelCentral) -> dict:
     state_label, state_class = CLASSIFICATION_LABELS[row.classificacao]
+    forma_label = (
+        FORM_LABELS.get(row.forma_pagamento, "Não informado")
+        if row.forma_pagamento is not None
+        else "Não informado"
+    )
     return {
         "row": row,
         "cliente_label": row.cliente_nome or "Sem cliente vinculado",
         "projeto_label": row.projeto_titulo or "Sem projeto vinculado",
         "vencimento": _date(row.data_vencimento),
         "valor": _money(row.valor),
-        "forma": FORM_LABELS.get(row.forma_pagamento, "Não informado"),
+        "forma": forma_label,
         "situacao": state_label,
         "situacao_class": state_class,
         "integridade": _integrity_labels(row),

@@ -8,7 +8,8 @@ from unittest.mock import patch
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import connection
+from django.db import DatabaseError, connection
+from django.db.migrations.exceptions import NodeNotFoundError
 from django.test import SimpleTestCase, TestCase
 
 from apps.core_sistema import services
@@ -72,6 +73,47 @@ class RestoreServiceTests(TestCase):
         result = self._assert_successful_preflight()
         self.assertEqual(result.source_path, str(self.source))
         self.assertEqual(result.live_db_path, str(self.live))
+
+    def test_migration_loader_failures_block_restore_before_database_changes(self):
+        failures = (
+            ImportError('injected migration import failure'),
+            NodeNotFoundError('injected missing node', ('app', '0002')),
+            KeyError('injected migration lookup failure'),
+            DatabaseError('injected migration database failure'),
+            RuntimeError('injected migration loader failure'),
+        )
+        live_before = self._digest(self.live)
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__):
+                with (
+                    self.assertNumQueries(0),
+                    patch.object(services, 'MigrationLoader', side_effect=failure),
+                    patch.object(services, '_validate_candidate') as validate,
+                ):
+                    result = self._service(self.source)
+
+                self.assertFalse(result.success)
+                self.assertEqual(result.category, 'INCOMPATIBLE_SCHEMA')
+                self.assertEqual(self._digest(self.live), live_before)
+                self.assertEqual(list(self.folder.glob('*.restore-stage-*')), [])
+                validate.assert_not_called()
+
+    def test_unclassified_migration_loader_failure_propagates_before_restore(self):
+        live_before = self._digest(self.live)
+        with (
+            patch.object(
+                services,
+                'MigrationLoader',
+                side_effect=IndexError('injected unclassified loader failure'),
+            ),
+            patch.object(services, '_validate_candidate') as validate,
+            self.assertRaisesMessage(IndexError, 'injected unclassified loader failure'),
+        ):
+            self._service(self.source)
+
+        self.assertEqual(self._digest(self.live), live_before)
+        self.assertEqual(list(self.folder.glob('*.restore-stage-*')), [])
+        validate.assert_not_called()
 
     def test_source_alone_is_non_mutating_preflight(self):
         before = self._digest(self.live)
@@ -231,14 +273,16 @@ class RestoreServiceTests(TestCase):
                 raise OSError('forensic preservation failure')
             return original_copy(source, destination)
 
-        with patch.object(services.os, 'replace', side_effect=mark_replace):
-            with patch.object(services, '_validate_candidate', side_effect=fail_post):
-                with patch.object(
-                    services,
-                    '_copy_file_verified',
-                    side_effect=fail_forensic_copy,
-                ):
-                    result = self._restore()
+        with (
+            patch.object(services.os, 'replace', side_effect=mark_replace),
+            patch.object(services, '_validate_candidate', side_effect=fail_post),
+            patch.object(
+                services,
+                '_copy_file_verified',
+                side_effect=fail_forensic_copy,
+            ),
+        ):
+            result = self._restore()
 
         self.assertFalse(result.success)
         self.assertEqual(result.category, 'POST_VALIDATION_FAILED_ROLLBACK_FAILED')
@@ -250,6 +294,71 @@ class RestoreServiceTests(TestCase):
         self.assertEqual(self._digest(Path(result.safety_copy_path)), original_live_digest)
         self.assertIn('forense', result.message.lower())
         self.assertIn('rollback', result.message.lower())
+
+    def test_unexpected_partial_forensic_failure_blocks_rollback_and_keeps_rejected_live(self):
+        self._replace_source(
+            lambda database: database.execute(
+                'CREATE TABLE rejected_restore_marker (value TEXT)',
+            ),
+        )
+        original_live_digest = self._digest(self.live)
+        rejected_live_digest = self._digest(self.source)
+        original_copy = services._copy_file_verified
+        mark_replace, fail_post = self._force_post_validation_failure()
+
+        def fail_forensic_after_partial_copy(source, destination):
+            if '.failed-restore-' in destination.name:
+                destination.write_bytes(b'partial forensic preservation')
+                raise RuntimeError('injected unexpected forensic failure')
+            return original_copy(source, destination)
+
+        with (
+            patch.object(services.os, 'replace', side_effect=mark_replace),
+            patch.object(services, '_validate_candidate', side_effect=fail_post),
+            patch.object(services, '_copy_file_verified', side_effect=fail_forensic_after_partial_copy),
+        ):
+            result = self._restore()
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.category, 'POST_VALIDATION_FAILED_ROLLBACK_FAILED')
+        self.assertFalse(result.rollback_performed)
+        self.assertIsNone(result.rollback_success)
+        self.assertIsNone(result.failed_restore_path)
+        self.assertEqual(self._digest(self.live), rejected_live_digest)
+        self.assertNotEqual(self._digest(self.live), original_live_digest)
+        self.assertTrue(Path(result.safety_copy_path).exists())
+        self.assertFalse(list(self.folder.glob('*.failed-restore-*')))
+        self.assertIn('injected unexpected forensic failure', result.message)
+        self.assertNotIn('Restauração concluída', result.message)
+
+    def test_unclassified_forensic_failure_propagates_without_rollback_or_success(self):
+        self._replace_source(
+            lambda database: database.execute(
+                'CREATE TABLE rejected_restore_marker (value TEXT)',
+            ),
+        )
+        rejected_live_digest = self._digest(self.source)
+        original_copy = services._copy_file_verified
+        mark_replace, fail_post = self._force_post_validation_failure()
+
+        def fail_forensic_copy(source, destination):
+            if '.failed-restore-' in destination.name:
+                destination.write_bytes(b'partial unclassified forensic artifact')
+                raise KeyError('injected unclassified forensic failure')
+            return original_copy(source, destination)
+
+        with (
+            patch.object(services.os, 'replace', side_effect=mark_replace),
+            patch.object(services, '_validate_candidate', side_effect=fail_post),
+            patch.object(services, '_copy_file_verified', side_effect=fail_forensic_copy),
+            self.assertRaisesMessage(KeyError, 'injected unclassified forensic failure'),
+        ):
+            self._restore()
+
+        self.assertEqual(self._digest(self.live), rejected_live_digest)
+        self.assertTrue(list(self.folder.glob('*.pre-restore-*.sqlite3')))
+        self.assertFalse(list(self.folder.glob('*.rollback-stage-*')))
+        self.assertFalse(list(self.folder.glob('*.failed-restore-*')))
 
     def test_backup_restore_lock_refusal_does_not_read_or_mutate_existing_config(self):
         destination = self.folder / 'backup destination'
@@ -270,20 +379,18 @@ class RestoreServiceTests(TestCase):
             services.settings,
             'DATABASES',
             {'default': {'NAME': str(self.live)}},
-        ):
-            with services._maintenance_lock(self.live, 'RESTORE') as acquired:
-                self.assertTrue(acquired)
-                with patch.object(
-                    services.ConfiguracaoSistema,
-                    'get_solo',
-                    side_effect=AssertionError('lock refusal must precede ORM access'),
-                ) as get_solo:
-                    with patch.object(
-                        services,
-                        '_registrar_falha',
-                        side_effect=AssertionError('lock refusal must not persist status'),
-                    ) as registrar_falha:
-                        result = services.executar_backup_pendrive()
+        ), services._maintenance_lock(self.live, 'RESTORE') as acquired:
+            self.assertTrue(acquired)
+            with patch.object(
+                services.ConfiguracaoSistema,
+                'get_solo',
+                side_effect=AssertionError('lock refusal must precede ORM access'),
+            ) as get_solo, patch.object(
+                services,
+                '_registrar_falha',
+                side_effect=AssertionError('lock refusal must not persist status'),
+            ) as registrar_falha:
+                result = services.executar_backup_pendrive()
 
         self.assertFalse(result[0])
         self.assertIn('manutenção', result[1].lower())
@@ -302,19 +409,21 @@ class RestoreServiceTests(TestCase):
         ConfiguracaoSistema.objects.all().delete()
         destination = self.folder / 'backup destination'
 
-        with patch.object(
-            services.settings,
-            'DATABASES',
-            {'default': {'NAME': str(self.live)}},
+        with (
+            patch.object(
+                services.settings,
+                'DATABASES',
+                {'default': {'NAME': str(self.live)}},
+            ),
+            services._maintenance_lock(self.live, 'RESTORE') as acquired,
+            patch.object(
+                services.ConfiguracaoSistema,
+                'get_solo',
+                side_effect=AssertionError('lock refusal must precede singleton creation'),
+            ) as get_solo,
         ):
-            with services._maintenance_lock(self.live, 'RESTORE') as acquired:
-                self.assertTrue(acquired)
-                with patch.object(
-                    services.ConfiguracaoSistema,
-                    'get_solo',
-                    side_effect=AssertionError('lock refusal must precede singleton creation'),
-                ) as get_solo:
-                    result = services.executar_backup_pendrive()
+            self.assertTrue(acquired)
+            result = services.executar_backup_pendrive()
 
         self.assertFalse(result[0])
         self.assertIn('manutenção', result[1].lower())
@@ -337,13 +446,12 @@ class RestoreServiceTests(TestCase):
             services.settings,
             'DATABASES',
             {'default': {'NAME': str(self.live)}},
+        ), patch.object(
+            services.sqlite3,
+            'connect',
+            side_effect=OSError('simulated backup failure'),
         ):
-            with patch.object(
-                services.sqlite3,
-                'connect',
-                side_effect=OSError('simulated backup failure'),
-            ):
-                result = services.executar_backup_pendrive()
+            result = services.executar_backup_pendrive()
 
         self.assertFalse(result[0])
         self.assertIn('simulated backup failure', result[1])
@@ -374,6 +482,76 @@ class RestoreServiceTests(TestCase):
         self.assertEqual(result.category, 'SAFETY_COPY_FAILED')
         self.assertEqual(list(self.folder.glob('*.restore-stage-*')), [])
 
+    def test_safety_copy_unexpected_failure_preserves_live_and_blocks_staging(self):
+        before = self._digest(self.live)
+        with patch.object(
+            services,
+            '_validated_copy',
+            side_effect=RuntimeError('injected safety copy failure'),
+        ):
+            result = self._restore()
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.category, 'SAFETY_COPY_FAILED')
+        self.assertIn('injected safety copy failure', result.message)
+        self.assertEqual(self._digest(self.live), before)
+        self.assertEqual(list(self.folder.glob('*.restore-stage-*')), [])
+
+    def test_unclassified_safety_copy_failure_propagates_before_staging(self):
+        before = self._digest(self.live)
+        with patch.object(
+            services,
+            '_validated_copy',
+            side_effect=KeyError('injected unclassified safety-copy failure'),
+        ), self.assertRaisesMessage(KeyError, 'injected unclassified safety-copy failure'):
+            self._restore()
+
+        self.assertEqual(self._digest(self.live), before)
+        self.assertEqual(list(self.folder.glob('*.restore-stage-*')), [])
+
+    def test_unclassified_partial_safety_copy_is_removed_before_propagating(self):
+        original = services._copy_file_verified
+
+        def fail_after_partial_safety_copy(source, destination):
+            if '.pre-restore-' in destination.name and destination.suffix == '.tmp':
+                destination.write_bytes(b'partial unclassified safety copy')
+                raise KeyError('injected partial safety-copy failure')
+            return original(source, destination)
+
+        before = self._digest(self.live)
+        with patch.object(
+            services,
+            '_copy_file_verified',
+            side_effect=fail_after_partial_safety_copy,
+        ), self.assertRaisesMessage(KeyError, 'injected partial safety-copy failure'):
+            self._restore()
+
+        self.assertEqual(self._digest(self.live), before)
+        self.assertEqual(list(self.folder.glob('*.pre-restore-*')), [])
+        self.assertEqual(list(self.folder.glob('*.restore-stage-*')), [])
+
+    def test_safety_copy_validation_failure_cleans_temp_and_blocks_staging(self):
+        original_validate = services._validate_candidate
+
+        def fail_safety_validation(path, live, expected, *, reject_live):
+            if 'pre-restore-' in path.name:
+                return services._validation(
+                    False,
+                    'CORRUPT_SQLITE',
+                    'injected safety validation failure',
+                )
+            return original_validate(path, live, expected, reject_live=reject_live)
+
+        before = self._digest(self.live)
+        with patch.object(services, '_validate_candidate', side_effect=fail_safety_validation):
+            result = self._restore()
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.category, 'SAFETY_COPY_FAILED')
+        self.assertEqual(self._digest(self.live), before)
+        self.assertEqual(list(self.folder.glob('*.restore-stage-*')), [])
+        self.assertEqual(list(self.folder.glob('.*.tmp')), [])
+
     def test_stage_copy_failure_preserves_live_and_safety_copy(self):
         original = services._copy_file_verified
 
@@ -389,6 +567,66 @@ class RestoreServiceTests(TestCase):
         self.assertEqual(result.category, 'STAGING_FAILED')
         self.assertEqual(before, self._digest(self.live))
         self.assertTrue(Path(result.safety_copy_path).exists())
+
+    def test_unexpected_partial_stage_copy_is_cleaned_and_live_is_preserved(self):
+        original = services._copy_file_verified
+
+        def fail_after_partial_stage(source, destination):
+            if '.restore-stage-' in destination.name:
+                destination.write_bytes(b'partial staged restore')
+                raise RuntimeError('injected unexpected staging failure')
+            return original(source, destination)
+
+        before = self._digest(self.live)
+        with patch.object(services, '_copy_file_verified', side_effect=fail_after_partial_stage):
+            result = self._restore()
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.category, 'STAGING_FAILED')
+        self.assertIn('injected unexpected staging failure', result.message)
+        self.assertEqual(self._digest(self.live), before)
+        self.assertTrue(Path(result.safety_copy_path).exists())
+        self.assertFalse(Path(result.staging_path).exists())
+        self.assertEqual(list(self.folder.glob('*.restore-stage-*')), [])
+
+    def test_unclassified_partial_stage_copy_propagates_after_cleanup(self):
+        original = services._copy_file_verified
+
+        def fail_after_partial_stage(source, destination):
+            if '.restore-stage-' in destination.name:
+                destination.write_bytes(b'partial unclassified stage')
+                raise KeyError('injected unclassified staging failure')
+            return original(source, destination)
+
+        before = self._digest(self.live)
+        with patch.object(
+            services,
+            '_copy_file_verified',
+            side_effect=fail_after_partial_stage,
+        ), self.assertRaisesMessage(KeyError, 'injected unclassified staging failure'):
+            self._restore()
+
+        self.assertEqual(self._digest(self.live), before)
+        self.assertEqual(list(self.folder.glob('*.restore-stage-*')), [])
+
+    def test_unclassified_staged_validation_propagates_after_cleanup(self):
+        original = services._validate_candidate
+
+        def fail_staged_validation(path, live, expected, *, reject_live):
+            if '.restore-stage-' in path.name:
+                raise KeyError('injected unclassified staged-validation failure')
+            return original(path, live, expected, reject_live=reject_live)
+
+        before = self._digest(self.live)
+        with (
+            patch.object(services, '_validate_candidate', side_effect=fail_staged_validation),
+            self.assertRaisesMessage(KeyError, 'injected unclassified staged-validation failure'),
+        ):
+            self._restore()
+
+        self.assertEqual(self._digest(self.live), before)
+        self.assertTrue(list(self.folder.glob('*.pre-restore-*.sqlite3')))
+        self.assertEqual(list(self.folder.glob('*.restore-stage-*')), [])
 
     def test_staged_validation_failure_preserves_live(self):
         original = services._validate_candidate
@@ -465,8 +703,7 @@ class RestoreServiceTests(TestCase):
                 return services._validation(False, 'CORRUPT_SQLITE', 'post invalid')
             return original_validate(path, live, expected, reject_live=reject_live)
 
-        with patch.object(services.os, 'replace', side_effect=mark_replace):
-            with patch.object(services, '_validate_candidate', side_effect=fail_post):
+        with patch.object(services.os, 'replace', side_effect=mark_replace), patch.object(services, '_validate_candidate', side_effect=fail_post):
                 result = self._restore()
         self.assertFalse(result.success)
         self.assertEqual(result.category, 'POST_VALIDATION_FAILED_ROLLBACK_OK')
@@ -494,8 +731,7 @@ class RestoreServiceTests(TestCase):
                 raise OSError('rollback replace failure')
             return original_replace(source, destination)
 
-        with patch.object(services.os, 'replace', side_effect=fail_rollback):
-            with patch.object(services, '_validate_candidate', side_effect=fail_post):
+        with patch.object(services.os, 'replace', side_effect=fail_rollback), patch.object(services, '_validate_candidate', side_effect=fail_post):
                 result = self._restore()
         self.assertFalse(result.success)
         self.assertEqual(result.category, 'POST_VALIDATION_FAILED_ROLLBACK_FAILED')
@@ -503,6 +739,121 @@ class RestoreServiceTests(TestCase):
         self.assertTrue(Path(result.safety_copy_path).exists())
         self.assertTrue(Path(result.failed_restore_path).exists())
         self.assertTrue(Path(result.staging_path).exists())
+
+    def test_rollback_post_validation_failure_is_reported_as_unconfirmed(self):
+        self._replace_source(
+            lambda database: database.execute(
+                'CREATE TABLE rejected_restore_marker (value TEXT)',
+            ),
+        )
+        original_live_digest = self._digest(self.live)
+        original_validate = services._validate_candidate
+        original_replace = services.os.replace
+        candidate_installed = False
+        rollback_installed = False
+
+        def mark_replace(source, destination):
+            nonlocal candidate_installed, rollback_installed
+            if Path(destination) == self.live and '.restore-stage-' in Path(source).name:
+                candidate_installed = True
+            if Path(destination) == self.live and '.rollback-stage-' in Path(source).name:
+                rollback_installed = True
+            return original_replace(source, destination)
+
+        def fail_candidate_and_rollback_validation(path, live, expected, *, reject_live):
+            if Path(path) == self.live and candidate_installed and not rollback_installed:
+                return services._validation(False, 'CORRUPT_SQLITE', 'candidate rejected')
+            if Path(path) == self.live and rollback_installed:
+                return services._validation(False, 'CORRUPT_SQLITE', 'rollback unconfirmed')
+            return original_validate(path, live, expected, reject_live=reject_live)
+
+        with (
+            patch.object(services.os, 'replace', side_effect=mark_replace),
+            patch.object(
+                services,
+                '_validate_candidate',
+                side_effect=fail_candidate_and_rollback_validation,
+            ),
+        ):
+            result = self._restore()
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.category, 'POST_VALIDATION_FAILED_ROLLBACK_FAILED')
+        self.assertTrue(result.rollback_performed)
+        self.assertFalse(result.rollback_success)
+        self.assertEqual(self._digest(self.live), original_live_digest)
+        self.assertTrue(Path(result.safety_copy_path).exists())
+        self.assertTrue(Path(result.failed_restore_path).exists())
+        self.assertNotIn('Restauração concluída', result.message)
+
+    def test_unclassified_rollback_validation_failure_never_reports_success(self):
+        self._replace_source(
+            lambda database: database.execute(
+                'CREATE TABLE rejected_restore_marker (value TEXT)',
+            ),
+        )
+        original_live_digest = self._digest(self.live)
+        original_validate = services._validate_candidate
+        original_replace = services.os.replace
+        candidate_installed = False
+        rollback_installed = False
+
+        def mark_replace(source, destination):
+            nonlocal candidate_installed, rollback_installed
+            if Path(destination) == self.live and '.restore-stage-' in Path(source).name:
+                candidate_installed = True
+            if Path(destination) == self.live and '.rollback-stage-' in Path(source).name:
+                rollback_installed = True
+            return original_replace(source, destination)
+
+        def fail_candidate_and_raise_after_rollback(path, live, expected, *, reject_live):
+            if Path(path) == self.live and candidate_installed and not rollback_installed:
+                return services._validation(False, 'CORRUPT_SQLITE', 'candidate rejected')
+            if Path(path) == self.live and rollback_installed:
+                raise KeyError('injected unclassified rollback validation failure')
+            return original_validate(path, live, expected, reject_live=reject_live)
+
+        with (
+            patch.object(services.os, 'replace', side_effect=mark_replace),
+            patch.object(
+                services,
+                '_validate_candidate',
+                side_effect=fail_candidate_and_raise_after_rollback,
+            ),
+            self.assertRaisesMessage(KeyError, 'injected unclassified rollback validation failure'),
+        ):
+            self._restore()
+
+        self.assertEqual(self._digest(self.live), original_live_digest)
+        self.assertTrue(list(self.folder.glob('*.pre-restore-*.sqlite3')))
+        self.assertTrue(list(self.folder.glob('*.failed-restore-*.sqlite3')))
+
+    def test_unclassified_rollback_failure_does_not_report_success(self):
+        self._replace_source(
+            lambda database: database.execute(
+                'CREATE TABLE rejected_restore_marker (value TEXT)',
+            ),
+        )
+        rejected_live_digest = self._digest(self.source)
+        original_copy = services._copy_file_verified
+        mark_replace, fail_post = self._force_post_validation_failure()
+
+        def fail_rollback_copy(source, destination):
+            if '.rollback-stage-' in destination.name:
+                raise KeyError('injected unclassified rollback failure')
+            return original_copy(source, destination)
+
+        with (
+            patch.object(services.os, 'replace', side_effect=mark_replace),
+            patch.object(services, '_validate_candidate', side_effect=fail_post),
+            patch.object(services, '_copy_file_verified', side_effect=fail_rollback_copy),
+            self.assertRaisesMessage(KeyError, 'injected unclassified rollback failure'),
+        ):
+            self._restore()
+
+        self.assertEqual(self._digest(self.live), rejected_live_digest)
+        self.assertTrue(list(self.folder.glob('*.pre-restore-*.sqlite3')))
+        self.assertTrue(list(self.folder.glob('*.failed-restore-*.sqlite3')))
 
     def test_repeated_restore_creates_a_new_safety_copy(self):
         first = self._restore()
@@ -654,6 +1005,24 @@ class RestoreServiceTests(TestCase):
         )
         self.assertEqual(self._digest(self.live), before)
 
+    def test_unclassified_restore_history_failure_does_not_undo_valid_restore(self):
+        self._replace_source(
+            lambda database: database.execute(
+                'CREATE TABLE restored_after_history_error (value TEXT)',
+            ),
+        )
+        restored_digest = self._digest(self.source)
+        with patch.object(
+            services,
+            'registrar_evento',
+            side_effect=KeyError('injected unclassified restore-history failure'),
+        ), self.assertRaisesMessage(KeyError, 'injected unclassified restore-history failure'):
+            self._restore()
+
+        self.assertEqual(self._digest(self.live), restored_digest)
+        self.assertTrue(list(self.folder.glob('*.pre-restore-*.sqlite3')))
+        self.assertFalse(list(self.folder.glob('*.rollback-stage-*')))
+
     def _force_post_validation_failure(self):
         original_validate = services._validate_candidate
         original_replace = services.os.replace
@@ -677,8 +1046,7 @@ class RestoreServiceTests(TestCase):
 
     def test_rollback_ok_records_failure_history(self):
         mark_replace, fail_post = self._force_post_validation_failure()
-        with patch.object(services.os, 'replace', side_effect=mark_replace):
-            with patch.object(services, '_validate_candidate', side_effect=fail_post):
+        with patch.object(services.os, 'replace', side_effect=mark_replace), patch.object(services, '_validate_candidate', side_effect=fail_post):
                 result = self._restore()
         self.assertFalse(result.success)
         self.assertEqual(result.category, 'POST_VALIDATION_FAILED_ROLLBACK_OK')
@@ -695,10 +1063,10 @@ class RestoreServiceTests(TestCase):
             services,
             'registrar_evento',
             side_effect=RuntimeError('history failure'),
+        ), patch.object(services.os, 'replace', side_effect=mark_replace), patch.object(
+            services, '_validate_candidate', side_effect=fail_post
         ):
-            with patch.object(services.os, 'replace', side_effect=mark_replace):
-                with patch.object(services, '_validate_candidate', side_effect=fail_post):
-                    result = self._restore()
+            result = self._restore()
         self.assertFalse(result.success)
         self.assertEqual(result.category, 'POST_VALIDATION_FAILED_ROLLBACK_OK')
         self.assertTrue(result.rollback_success)

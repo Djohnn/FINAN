@@ -8,14 +8,15 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.urls import reverse
 
+from apps.core_sistema.models import EventoSistema
 from apps.financeiro.models import LancamentoFinanceiro
 from apps.financeiro.selectors import (
     CentralContasReceber,
+    ClassificacaoRecebivel,
+    InconsistenciaRecebivel,
     RecebivelCentral,
 )
 from apps.kanban_projetos.models import ProjetoKanban
-from apps.core_sistema.models import EventoSistema
-
 
 REF = date(2026, 10, 23)
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,9 +35,9 @@ def make_row(
     description: str = "Parcela 1 de 2",
     form: str | None = "PIX",
     category: str | None = "SERVICO_CLIENTE",
-    classification: str | None = None,
+    classification: ClassificacaoRecebivel | None = None,
     days_late: int | None = None,
-    inconsistencies: tuple[str, ...] = (),
+    inconsistencies: tuple[InconsistenciaRecebivel, ...] = (),
     eligible: bool | None = None,
 ) -> RecebivelCentral:
     delta = (due - REF).days

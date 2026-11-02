@@ -30,10 +30,10 @@ class FinancialValueIntegrityTests(TestCase):
         )
 
     def ledger(self, value, **overrides):
-        fields = dict(
-            tipo='ENTRADA', categoria='SERVICO_CLIENTE', descricao='Fixture 075',
-            valor=value, data_vencimento=self.today,
-        )
+        fields = {
+            'tipo': 'ENTRADA', 'categoria': 'SERVICO_CLIENTE', 'descricao': 'Fixture 075',
+            'valor': value, 'data_vencimento': self.today,
+        }
         fields.update(overrides)
         return LancamentoFinanceiro.objects.create(**fields)
 
@@ -50,21 +50,20 @@ class FinancialValueIntegrityTests(TestCase):
         )
 
     def approval_kwargs(self, project, **overrides):
-        fields = dict(
-            projeto_id=project.pk, valor_total=Decimal('100.00'),
-            valor_entrada=Decimal('10.00'), forma_pagamento_entrada='PIX',
-            data_inicio_producao=self.today,
-            data_entrega_prevista=self.today + timedelta(days=30),
-            qtd_parcelas_restante=3,
-        )
+        fields = {
+            'projeto_id': project.pk, 'valor_total': Decimal('100.00'),
+            'valor_entrada': Decimal('10.00'), 'forma_pagamento_entrada': 'PIX',
+            'data_inicio_producao': self.today,
+            'data_entrega_prevista': self.today + timedelta(days=30),
+            'qtd_parcelas_restante': 3,
+        }
         fields.update(overrides)
         return fields
 
     def assert_invalid_create(self, value):
         before = LancamentoFinanceiro.objects.count()
-        with self.assertRaises(ValidationError) as caught:
-            with transaction.atomic():
-                self.ledger(value)
+        with self.assertRaises(ValidationError) as caught, transaction.atomic():
+            self.ledger(value)
         self.assertTrue(hasattr(caught.exception, 'error_dict'))
         self.assertIn('valor', caught.exception.message_dict)
         self.assertEqual(LancamentoFinanceiro.objects.count(), before)
@@ -76,7 +75,7 @@ class FinancialValueIntegrityTests(TestCase):
         self.assert_invalid_create(Decimal('0.001'))
 
     def test_model_create_rejects_zero(self):
-        self.assert_invalid_create(Decimal('0'))
+        self.assert_invalid_create(Decimal(0))
 
     def test_model_create_rejects_scaled_zero(self):
         self.assert_invalid_create(Decimal('0.00'))
@@ -131,8 +130,7 @@ class FinancialValueIntegrityTests(TestCase):
             with self.subTest(value=value):
                 row.valor = Decimal(value)
                 row.descricao = 'Must not persist'
-                with self.assertRaises(ValidationError) as caught:
-                    with transaction.atomic():
+                with self.assertRaises(ValidationError) as caught, transaction.atomic():
                         row.save()
                 self.assertTrue(hasattr(caught.exception, 'error_dict'))
                 self.assertIn('valor', caught.exception.message_dict)
@@ -227,7 +225,7 @@ class FinancialValueIntegrityTests(TestCase):
         rows = list(project.lancamentos.order_by('pk'))
         self.assertEqual(len(rows), 3)
         self.assertTrue(all(row.valor > 0 and row.status == 'PENDENTE' for row in rows))
-        self.assertEqual(sum((row.valor for row in rows), Decimal('0')), Decimal('1.23'))
+        self.assertEqual(sum((row.valor for row in rows), Decimal(0)), Decimal('1.23'))
         before = self.snapshot(project)
         aprovar_orcamento_service(**kwargs)
         self.assertEqual(self.snapshot(project), before)
@@ -239,4 +237,4 @@ class FinancialValueIntegrityTests(TestCase):
                 aprovar_orcamento_service(**self.approval_kwargs(project, valor_total=total, valor_entrada=entry))
                 rows = list(project.lancamentos.order_by('pk'))
                 self.assertEqual([row.valor for row in rows], [Decimal(x) for x in ('0.10', '0.38', '0.38', '0.37')])
-                self.assertEqual(sum((row.valor for row in rows), Decimal('0')), Decimal('1.23'))
+                self.assertEqual(sum((row.valor for row in rows), Decimal(0)), Decimal('1.23'))

@@ -3,17 +3,20 @@ import os
 import re
 import sqlite3
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import UTC, datetime, timedelta
+from datetime import timezone as dt_timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import connections, transaction
+from django.db import DatabaseError, connections, transaction
+from django.db.migrations.exceptions import NodeNotFoundError
 from django.db.migrations.loader import MigrationLoader
 from django.utils import timezone
 
@@ -23,7 +26,6 @@ from .models import (
     EventoSistema,
     TipoEventoSistema,
 )
-
 
 _EVENT_CONTRACTS = {
     'ORCAMENTO_APROVADO': ('KANBAN', 'ProjetoKanban'),
@@ -73,10 +75,7 @@ def _canonical_money(value: Any) -> str:
         raise ValidationError('valores monetários não podem ser bool ou float.')
     from apps.financeiro.models import LancamentoFinanceiro
 
-    try:
-        decimal_value = LancamentoFinanceiro.validar_valor_monetario(value)
-    except ValidationError:
-        raise
+    decimal_value = LancamentoFinanceiro.validar_valor_monetario(value)
     return format(decimal_value.quantize(Decimal('0.01')), 'f')
 
 
@@ -184,7 +183,7 @@ def _maintenance_lock(source_path: Path, operation: str) -> Iterator[bool]:
         metadata = (
             f'pid={os.getpid()}\n'
             f'operation={operation}\n'
-            f'created_at={datetime.now(dt_timezone.utc).isoformat()}\n'
+            f'created_at={datetime.now(UTC).isoformat()}\n'
             f'process_start_identity={_process_start_identity()}\n'
         )
         os.write(handle, metadata.encode('utf-8'))
@@ -246,7 +245,7 @@ def _attempt_maintenance_event(*, tipo: str, metadata=None) -> bool:
         if metadata is not None:
             kwargs['metadata'] = metadata
         registrar_evento(**kwargs)
-    except Exception:
+    except (DatabaseError, RuntimeError, ValidationError):
         return False
     return True
 
@@ -270,7 +269,7 @@ def executar_backup_pendrive() -> tuple[bool, str]:
     source_name = settings.DATABASES.get('default', {}).get('NAME')
     if not source_name:
         return False, 'Arquivo SQLite de origem não configurado.'
-    source_path = Path(source_name)
+    source_path = _path_from_database_name(source_name)
     if not _is_regular_source_file(source_path):
         return False, 'Arquivo SQLite de origem não encontrado.'
 
@@ -309,6 +308,7 @@ def executar_backup_pendrive() -> tuple[bool, str]:
         final_path = destination / f'backup_marcenaria_{date_text}.sqlite3'
         temp_path = destination / f'.{final_path.name}.{uuid.uuid4().hex}.tmp'
         source_conn = destination_conn = None
+        backup_error: sqlite3.Error | OSError | RuntimeError | None = None
         try:
             source_conn = sqlite3.connect(_sqlite_read_only_uri(source_path), uri=True)
             destination_conn = sqlite3.connect(str(temp_path))
@@ -318,21 +318,27 @@ def executar_backup_pendrive() -> tuple[bool, str]:
             if not integrity or integrity[0] != 'ok':
                 raise sqlite3.DatabaseError('integrity_check do backup não retornou ok')
             destination_conn.close()
+            destination_conn = None
             source_conn.close()
-            destination_conn = source_conn = None
+            source_conn = None
             os.replace(temp_path, final_path)
-        except Exception as exc:
-            if destination_conn is not None:
-                destination_conn.close()
-            if source_conn is not None:
-                source_conn.close()
+        except (sqlite3.Error, OSError, RuntimeError) as exc:
+            backup_error = exc
+        finally:
+            for opened_connection in (destination_conn, source_conn):
+                if opened_connection is not None:
+                    try:
+                        opened_connection.close()
+                    except (sqlite3.Error, RuntimeError):
+                        pass
             try:
                 temp_path.unlink()
             except OSError:
                 pass
+        if backup_error is not None:
             return _backup_failure(
                 config,
-                f'Erro ao realizar backup do SQLite: {exc}',
+                f'Erro ao realizar backup do SQLite: {backup_error}',
                 'ERRO_SQLITE_BACKUP',
             )
 
@@ -432,7 +438,24 @@ def _configured_live_database() -> Path:
     name = settings.DATABASES.get('default', {}).get('NAME')
     if not name:
         raise ValueError('Arquivo SQLite oficial não está configurado.')
-    return Path(name).expanduser()
+    return _path_from_database_name(name).expanduser()
+
+
+def _path_from_database_name(name: object) -> Path:
+    if isinstance(name, str):
+        return Path(name)
+    if isinstance(name, os.PathLike):
+        path_value = os.fspath(name)
+        if isinstance(path_value, str):
+            return Path(path_value)
+        raise TypeError(
+            'argument should be a str or an os.PathLike object where '
+            "__fspath__ returns a str, not 'bytes'"
+        )
+    raise TypeError(
+        'argument should be a str or an os.PathLike object where '
+        f"__fspath__ returns a str, not '{type(name).__name__}'"
+    )
 
 
 def _is_absolute_path(value: str, path: Path) -> bool:
@@ -653,7 +676,15 @@ def _preflight(
         )
     try:
         expected_migrations = _current_migration_set()
-    except Exception:
+    except (
+        DatabaseError,
+        ImportError,
+        KeyError,
+        NodeNotFoundError,
+        OSError,
+        RuntimeError,
+        SyntaxError,
+    ):
         return (
             _validation(False, 'INCOMPATIBLE_SCHEMA', 'Não foi possível determinar as migrations atuais.'),
             None,
@@ -697,7 +728,7 @@ def _copy_file_verified(source: Path, destination: Path) -> None:
 
 
 def _artifact_path(live_path: Path, label: str, suffix: str = '.sqlite3') -> Path:
-    timestamp = datetime.now(dt_timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    timestamp = datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')
     return live_path.with_name(f'{live_path.name}.{label}-{timestamp}-{uuid.uuid4().hex}{suffix}')
 
 
@@ -719,13 +750,12 @@ def _validated_copy(
         if not validation.valid:
             raise ValueError(validation.message)
         os.replace(temporary, final_path)
-    except Exception:
+        return final_path
+    finally:
         try:
             temporary.unlink()
         except FileNotFoundError:
             pass
-        raise
-    return final_path
 
 
 def _result(
@@ -891,7 +921,7 @@ def restore_backup(
         safety_copy = _artifact_path(live, 'pre-restore')
         try:
             _validated_copy(live, safety_copy, live, expected_migrations)
-        except Exception as exc:
+        except (DatabaseError, OSError, RuntimeError, ValueError, sqlite3.Error) as exc:
             return _result(
                 success=False,
                 category='SAFETY_COPY_FAILED',
@@ -902,34 +932,34 @@ def restore_backup(
             )
 
         staging = _artifact_path(live, 'restore-stage', '.tmp')
+        staging_accepted = False
         try:
             _copy_file_verified(source, staging)
-        except Exception as exc:
-            try:
-                staging.unlink()
-            except FileNotFoundError:
-                pass
+            staged_validation = _validate_candidate(
+                staging,
+                live,
+                expected_migrations,
+                reject_live=False,
+            )
+            staging_accepted = staged_validation.valid
+        except (DatabaseError, OSError, RuntimeError, ValueError, sqlite3.Error) as exc:
             return _result(
                 success=False,
                 category='STAGING_FAILED',
-                message=f'Não foi possível preparar o arquivo de restauração: {exc}',
+                message=f'Não foi possível preparar e validar o arquivo de restauração: {exc}',
                 source_path=source,
                 live_path=live,
                 dry_run=False,
                 safety_copy_path=safety_copy,
                 staging_path=staging,
             )
-        staged_validation = _validate_candidate(
-            staging,
-            live,
-            expected_migrations,
-            reject_live=False,
-        )
+        finally:
+            if not staging_accepted:
+                try:
+                    staging.unlink()
+                except FileNotFoundError:
+                    pass
         if not staged_validation.valid:
-            try:
-                staging.unlink()
-            except FileNotFoundError:
-                pass
             return _result(
                 success=False,
                 category='STAGING_FAILED',
@@ -980,22 +1010,30 @@ def restore_backup(
             )
 
         failed_restore = _artifact_path(live, 'failed-restore')
+        forensic_copy_complete = False
+        forensic_copy_failure: OSError | RuntimeError | None = None
+        cleanup_message = ''
         try:
             _copy_file_verified(live, failed_restore)
-        except Exception as exc:
-            cleanup_message = ''
-            try:
-                failed_restore.unlink()
-            except FileNotFoundError:
-                pass
-            except OSError as cleanup_exc:
-                cleanup_message = f' A limpeza do artefato parcial também falhou: {cleanup_exc}.'
+            forensic_copy_complete = True
+        except (OSError, RuntimeError) as exc:
+            forensic_copy_failure = exc
+        finally:
+            if not forensic_copy_complete:
+                try:
+                    failed_restore.unlink()
+                except FileNotFoundError:
+                    pass
+                except OSError as cleanup_exc:
+                    cleanup_message = f' A limpeza do artefato parcial também falhou: {cleanup_exc}.'
+        if forensic_copy_failure is not None:
+            forensic_failure_message = str(forensic_copy_failure)
             return _result(
                 success=False,
                 category='POST_VALIDATION_FAILED_ROLLBACK_FAILED',
                 message=(
                     'A validação pós-restauração falhou e a preservação forense do banco '
-                    f'rejeitado também falhou: {exc}. O rollback não foi tentado para evitar '
+                    f'rejeitado também falhou: {forensic_failure_message}. O rollback não foi tentado para evitar '
                     'destruir o candidato rejeitado, que permanece no banco ativo e não deve '
                     'ser considerado válido. A cópia de segurança pré-restauração validada '
                     f'permanece disponível para recuperação manual.{cleanup_message}'
@@ -1029,7 +1067,7 @@ def restore_backup(
             )
             if not restored_validation.valid:
                 raise ValueError(restored_validation.message)
-        except Exception as exc:
+        except (DatabaseError, OSError, RuntimeError, ValueError, sqlite3.Error) as exc:
             return _result(
                 success=False,
                 category='POST_VALIDATION_FAILED_ROLLBACK_FAILED',

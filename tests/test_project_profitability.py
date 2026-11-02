@@ -7,7 +7,16 @@ Each test states the relevant Given/When/Then behavior in its name/docstring.
 
 from dataclasses import FrozenInstanceError, fields
 from datetime import date
-from decimal import Decimal, DivisionByZero, Inexact, InvalidOperation, Overflow, ROUND_DOWN, Rounded, localcontext
+from decimal import (
+    ROUND_DOWN,
+    Decimal,
+    DivisionByZero,
+    Inexact,
+    InvalidOperation,
+    Overflow,
+    Rounded,
+    localcontext,
+)
 
 from django.db import connection
 from django.test import TestCase
@@ -24,7 +33,6 @@ from apps.financeiro.selectors import (
     rentabilidade_projetos,
 )
 from apps.kanban_projetos.models import ProjetoKanban
-
 
 D = Decimal
 ZERO = D('0.00')
@@ -419,7 +427,7 @@ class ProjectProfitabilityTests(TestCase):
         project = self.project(total='1.00')
         self.bypass(ProjetoKanban, project.pk, 'etapa', 'BAD_STAGE')
         self.bypass(ProjetoKanban, project.pk, 'valor_total', '-1.00')
-        paid = self.ledger(project, status='PAGO', value='1.00', paid=None)
+        self.ledger(project, status='PAGO', value='1.00', paid=None)
         invalid_status = self.ledger(project)
         self.bypass(LancamentoFinanceiro, invalid_status.pk, 'status', 'BAD')
         invalid_type = self.ledger(project)

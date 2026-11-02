@@ -8,6 +8,7 @@ from django.utils import timezone
 from apps.core_sistema.services import registrar_evento
 from apps.financeiro.models import LancamentoFinanceiro
 from apps.kanban_projetos.models import ProjetoKanban
+
 from .models import Funcionario
 
 
@@ -66,8 +67,8 @@ def _extract_service_observacao(
 @transaction.atomic
 def lancar_pagamento_funcionario_service(
     funcionario_id: int,
-    quantidade_periodos: int | float | Decimal = 1,
-    valor_customizado: Optional[Decimal | float | str] = None,
+    quantidade_periodos: float | Decimal = 1,
+    valor_customizado: Decimal | float | str | None = None,
     forma_pagamento: str = 'PIX',
     pago_hoje: bool = True,
     data_vencimento=None,

@@ -1,0 +1,20 @@
+target-version = "py314"
+line-length = 88
+
+[lint]
+select = [
+  "BLE001",
+  "C408",
+  "F841",
+  "FURB157",
+  "I001",
+  "PLR2044",
+  "PYI041",
+  "RUF012",
+  "SIM117",
+  "TRY004",
+  "TRY203",
+  "UP017",
+  "UP035",
+  "UP045",
+]

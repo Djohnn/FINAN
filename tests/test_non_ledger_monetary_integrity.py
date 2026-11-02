@@ -16,7 +16,6 @@ from apps.financeiro.services import (
 from apps.kanban_projetos.models import ProjetoKanban
 from apps.kanban_projetos.services import aprovar_orcamento_service
 
-
 MAX_VALUE = Decimal('99999999.99')
 POSITIVE_OVERFLOW = Decimal('100000000.00')
 NEGATIVE_OVERFLOW = Decimal('-100000000.00')
@@ -27,7 +26,7 @@ NEGATIVE_EXACT_CENT_VALUES = (
     Decimal('-0.01'),
 )
 ZERO_VALUES = (
-    Decimal('0'),
+    Decimal(0),
     Decimal('0.00'),
     Decimal('0.000'),
     Decimal('-0'),
@@ -186,9 +185,8 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
 
     def assert_funcionario_nonfinite_rejected(self, value):
         before = Funcionario.objects.count()
-        with self.assertRaises(ValidationError) as caught:
-            with transaction.atomic():
-                self.employee(valor_base=value)
+        with self.assertRaises(ValidationError) as caught, transaction.atomic():
+            self.employee(valor_base=value)
         self.assertIsInstance(caught.exception, ValidationError)
         self.assertEqual(Funcionario.objects.count(), before)
 
@@ -331,8 +329,7 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
             for value in (POSITIVE_OVERFLOW, NEGATIVE_OVERFLOW):
                 with self.subTest(field_name=field_name, value=value):
                     before = ProjetoKanban.objects.count()
-                    with self.assertRaises(ValidationError) as caught:
-                        with transaction.atomic():
+                    with self.assertRaises(ValidationError) as caught, transaction.atomic():
                             self.project(**{field_name: value})
                     self.assert_field_error(caught, field_name)
                     self.assertEqual(ProjetoKanban.objects.count(), before)
@@ -362,9 +359,8 @@ class NonLedgerMonetaryIntegrityTests(TestCase):
 
     def assert_project_nonfinite_rejected(self, field_name):
         before = ProjetoKanban.objects.count()
-        with self.assertRaises(ValidationError) as caught:
-            with transaction.atomic():
-                self.project(**{field_name: Decimal('NaN')})
+        with self.assertRaises(ValidationError) as caught, transaction.atomic():
+            self.project(**{field_name: Decimal('NaN')})
         self.assertIsInstance(caught.exception, ValidationError)
         self.assertEqual(ProjetoKanban.objects.count(), before)
 

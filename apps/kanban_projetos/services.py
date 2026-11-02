@@ -10,8 +10,8 @@ from apps.clientes_agenda.models import AgendaContato
 from apps.core_sistema.services import registrar_evento
 from apps.financeiro.models import LancamentoFinanceiro
 from apps.financeiro.services import sincronizar_saldo_projeto
-from .models import ProjetoKanban
 
+from .models import ProjetoKanban
 
 KANBAN_LABEL_MAX_LENGTH = 100
 
@@ -227,7 +227,7 @@ def arquivar_orcamento_service(
     projeto_id: int,
     motivo_arquivamento: str,
     observacao: str = '',
-    dias_lembrete_retorno: Optional[int | str] = None,
+    dias_lembrete_retorno: int | str | None = None,
 ) -> ProjetoKanban:
     """
     Move o projeto para a geladeira (9_ARQUIVADO), registrando o motivo
@@ -335,7 +335,7 @@ def reativar_orcamento_service(
 def finalizar_projeto_service(
     projeto_id: int,
     quitar_pendencias: bool = False,
-    forma_pagamento_quitacao: Optional[str] = None,
+    forma_pagamento_quitacao: str | None = None,
 ) -> ProjetoKanban:
     """
     Finaliza o projeto (6_FINALIZADO), registra data de entrega realizada,

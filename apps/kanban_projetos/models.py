@@ -4,7 +4,7 @@ from typing import ClassVar
 from urllib.parse import quote
 
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import DatabaseError, models
 from django.utils import timezone
 
 
@@ -13,7 +13,7 @@ class ProjetoKanban(models.Model):
     Card principal do fluxo operacional do Kanban na marcenaria.
     Gerencia do primeiro contato até o pós-venda ou arquivamento.
     """
-    ETAPA_CHOICES = [
+    ETAPA_CHOICES: ClassVar[list[tuple[str, str]]] = [
         ('1_CONTATO', 'Novo Contato'),
         ('2_ORCAMENTO', 'Em Orçamento'),
         ('3_APROVADO', 'Aprovado / Aguardando Produção'),
@@ -23,7 +23,7 @@ class ProjetoKanban(models.Model):
         ('9_ARQUIVADO', 'Arquivado (Geladeira)'),
     ]
 
-    MOTIVO_ARQUIVAMENTO_CHOICES = [
+    MOTIVO_ARQUIVAMENTO_CHOICES: ClassVar[list[tuple[str, str]]] = [
         ('PRECO_ALTO', 'Achou Caro'),
         ('ADIOU_OBRA', 'Adiou Obra'),
         ('FECHOU_CONCORRENTE', 'Fechou com Concorrente'),
@@ -112,7 +112,7 @@ class ProjetoKanban(models.Model):
     class Meta:
         verbose_name = "Projeto no Kanban"
         verbose_name_plural = "Projetos no Kanban"
-        ordering = ["-atualizado_em"]
+        ordering: ClassVar[list[str]] = ["-atualizado_em"]
 
     def __str__(self):
         return f"{self.titulo_servico} - {self.cliente.nome} ({self.get_etapa_display()})"
@@ -159,6 +159,7 @@ class ProjetoKanban(models.Model):
     @classmethod
     def validate_monetary_magnitude(cls, field_name, value) -> Decimal:
         field = cls._meta.get_field(field_name)
+        assert isinstance(field, models.DecimalField)
         try:
             decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
         except (InvalidOperation, TypeError, ValueError) as exc:
@@ -266,7 +267,7 @@ class ProjetoKanban(models.Model):
                 if config
                 else ConfiguracaoSistema._meta.get_field("nome_marcenaria").get_default()
             ) or "Marcenaria"
-        except Exception:
+        except (DatabaseError, RuntimeError):
             nome_marcenaria = "Marcenaria"
 
         nome_cliente = self.cliente.nome.split()[0] if self.cliente.nome else "Cliente"

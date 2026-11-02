@@ -1,5 +1,5 @@
-import sqlite3
 import shutil
+import sqlite3
 import tempfile
 from datetime import timedelta
 from decimal import Decimal
@@ -59,9 +59,9 @@ class AprovacaoEFinanceiroTests(TestCase):
 
     def test_aprovacao_rejeita_valores_datas_formas_e_parcelas_invalidos(self):
         casos = (
-            {'valor_total': Decimal('0')},
-            {'valor_entrada': Decimal('-1')},
-            {'valor_entrada': Decimal('1001')},
+            {'valor_total': Decimal(0)},
+            {'valor_entrada': Decimal(-1)},
+            {'valor_entrada': Decimal(1001)},
             {'forma_pagamento_entrada': 'INVALIDA'},
             {'data_inicio_producao': self.kwargs['data_entrega_prevista'] + timedelta(days=1)},
             {'qtd_parcelas_restante': 0},

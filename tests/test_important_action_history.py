@@ -28,6 +28,7 @@ from apps.kanban_projetos.services import (
     reativar_orcamento_service,
 )
 
+
 class ImportantActionHistoryModelTests(TestCase):
     def test_evento_sistema_metadata_defaults_to_a_fresh_empty_dict(self):
         evento = EventoSistema.objects.create(
@@ -261,8 +262,17 @@ class SelectorAndAdminTests(TestCase):
         )
 
     def test_selector_limits_and_inputs_are_validated(self):
-        for value in (True, False, 0, 101, '2', None):
-            with self.subTest(value=value), self.assertRaises(ValueError):
+        for value in (True, False, '2', None):
+            with self.subTest(value=value), self.assertNumQueries(0), self.assertRaisesMessage(
+                TypeError,
+                'limit deve ser um inteiro.',
+            ):
+                eventos_recentes(limit=value)
+        for value in (0, 101):
+            with self.subTest(value=value), self.assertNumQueries(0), self.assertRaisesMessage(
+                ValueError,
+                'limit deve estar entre 1 e 100.',
+            ):
                 eventos_recentes(limit=value)
         with self.assertRaises(ValueError):
             eventos_recentes(dominio='INVALIDO')
@@ -411,9 +421,8 @@ class BusinessHistoryTests(TestCase):
         with patch(
             'apps.kanban_projetos.services.registrar_evento',
             side_effect=ValidationError('history unavailable'),
-        ):
-            with self.assertRaises(ValidationError):
-                self._approve()
+        ), self.assertRaises(ValidationError):
+            self._approve()
         self.projeto.refresh_from_db()
         self.assertEqual(self.projeto.etapa, '2_ORCAMENTO')
         self.assertEqual(LancamentoFinanceiro.objects.count(), 0)
@@ -422,9 +431,8 @@ class BusinessHistoryTests(TestCase):
         with patch(
             'apps.equipe.services.registrar_evento',
             side_effect=ValidationError('history unavailable'),
-        ):
-            with self.assertRaises(ValidationError):
-                lancar_pagamento_funcionario_service(self.funcionario.pk)
+        ), self.assertRaises(ValidationError):
+            lancar_pagamento_funcionario_service(self.funcionario.pk)
         self.assertEqual(LancamentoFinanceiro.objects.count(), 0)
 
     def test_settlement_event_failure_rolls_back_settlement(self):
@@ -440,9 +448,8 @@ class BusinessHistoryTests(TestCase):
         with patch(
             'apps.financeiro.services.registrar_evento',
             side_effect=ValidationError('history unavailable'),
-        ):
-            with self.assertRaises(ValidationError):
-                registrar_pagamento_service(lancamento.pk, Decimal('100.00'))
+        ), self.assertRaises(ValidationError):
+            registrar_pagamento_service(lancamento.pk, Decimal('100.00'))
         lancamento.refresh_from_db()
         self.assertEqual(lancamento.status, 'PENDENTE')
 
@@ -455,8 +462,7 @@ class BusinessHistoryTests(TestCase):
         with patch(
             'apps.clientes_agenda.services.registrar_evento',
             side_effect=ValidationError('history unavailable'),
-        ):
-            with self.assertRaises(ValidationError):
-                concluir_pos_venda_service(agenda.pk, 'feedback válido', 'SATISFEITO')
+        ), self.assertRaises(ValidationError):
+            concluir_pos_venda_service(agenda.pk, 'feedback válido', 'SATISFEITO')
         agenda.refresh_from_db()
         self.assertFalse(agenda.realizado)

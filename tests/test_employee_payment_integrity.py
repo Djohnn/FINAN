@@ -35,7 +35,7 @@ class EmployeePaymentPeriodIntegrityTests(TestCase):
         self.assertEqual(LancamentoFinanceiro.objects.count(), initial_count)
 
     def test_numeric_zero_representations_are_rejected_without_financial_mutation(self):
-        for quantity in (0, 0.0, Decimal('0')):
+        for quantity in (0, 0.0, Decimal(0)):
             with self.subTest(quantity=quantity):
                 initial_count = LancamentoFinanceiro.objects.count()
 
@@ -56,7 +56,7 @@ class EmployeePaymentPeriodIntegrityTests(TestCase):
         with self.assertRaises(ValidationError):
             lancar_pagamento_funcionario_service(
                 self.funcionario.pk,
-                quantidade_periodos=Decimal('-1'),
+                quantidade_periodos=Decimal(-1),
             )
 
         self.assertEqual(LancamentoFinanceiro.objects.count(), initial_count)
@@ -895,12 +895,11 @@ class EmployeePaymentProjectAttributionTests(TestCase):
         with patch(
             'apps.equipe.services.registrar_evento',
             side_effect=RuntimeError('event failure'),
-        ):
-            with self.assertRaises(RuntimeError):
-                lancar_pagamento_funcionario_service(
-                    self.funcionario.pk,
-                    projeto_id=self.project_a.pk,
-                )
+        ), self.assertRaises(RuntimeError):
+            lancar_pagamento_funcionario_service(
+                self.funcionario.pk,
+                projeto_id=self.project_a.pk,
+            )
 
         self.assertEqual(LancamentoFinanceiro.objects.count(), 0)
         self.assertEqual(EventoSistema.objects.count(), 0)

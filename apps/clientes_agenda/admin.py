@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Cliente, AgendaContato
+
+from .models import AgendaContato, Cliente
 
 
 @admin.register(Cliente)

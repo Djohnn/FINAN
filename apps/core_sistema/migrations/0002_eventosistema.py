@@ -1,13 +1,16 @@
+from typing import ClassVar
+
 from django.db import migrations, models
+from django.db.migrations.operations.base import Operation
 
 
 class Migration(migrations.Migration):
 
-    dependencies = [
+    dependencies: ClassVar[list[tuple[str, str]]] = [
         ('core_sistema', '0001_initial'),
     ]
 
-    operations = [
+    operations: ClassVar[list[Operation]] = [
         migrations.CreateModel(
             name='EventoSistema',
             fields=[

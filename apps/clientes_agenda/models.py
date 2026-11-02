@@ -1,8 +1,9 @@
 import re
+from typing import ClassVar
 from urllib.parse import quote
 
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import DatabaseError, models
 
 
 class Cliente(models.Model):
@@ -18,7 +19,7 @@ class Cliente(models.Model):
     class Meta:
         verbose_name = "Cliente"
         verbose_name_plural = "Clientes"
-        ordering = ["nome"]
+        ordering: ClassVar[list[str]] = ["nome"]
 
     def __str__(self):
         return self.nome
@@ -29,13 +30,13 @@ class AgendaContato(models.Model):
     Agenda de contatos e pós-venda para clientes.
     Integrado com o calendário e disparador de alertas.
     """
-    TIPO_CHOICES = [
+    TIPO_CHOICES: ClassVar[list[tuple[str, str]]] = [
         ('POS_VENDA_30_DIAS', 'Pós-Venda 30 Dias'),
         ('RETORNO_ORCAMENTO', 'Retorno de Orçamento'),
         ('LIGACAO_MANUAL', 'Ligação Manual'),
     ]
 
-    SATISFACAO_CHOICES = [
+    SATISFACAO_CHOICES: ClassVar[list[tuple[str, str]]] = [
         ('SATISFEITO', 'Satisfeito'),
         ('AJUSTE_SOLICITADO', 'Ajuste Solicitado'),
         ('INSATISFEITO', 'Insatisfeito'),
@@ -88,7 +89,7 @@ class AgendaContato(models.Model):
     class Meta:
         verbose_name = "Agenda de Contato"
         verbose_name_plural = "Agenda de Contatos"
-        ordering = ["data_agendada"]
+        ordering: ClassVar[list[str]] = ["data_agendada"]
 
     def __str__(self):
         return f"{self.get_tipo_display()} - {self.cliente.nome} ({self.data_agendada.strftime('%d/%m/%Y')})"
@@ -152,7 +153,7 @@ class AgendaContato(models.Model):
                 if config
                 else ConfiguracaoSistema._meta.get_field("nome_marcenaria").get_default()
             ) or "Marcenaria"
-        except Exception:
+        except (DatabaseError, RuntimeError):
             nome_marcenaria = "Marcenaria"
 
         nome_cliente = self.cliente.nome.split()[0] if self.cliente.nome else "Cliente"

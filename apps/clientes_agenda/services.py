@@ -3,6 +3,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core_sistema.services import registrar_evento
+
 from .models import AgendaContato
 
 

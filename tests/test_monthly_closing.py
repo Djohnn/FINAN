@@ -5,7 +5,7 @@ Each test states its Given/When/Then behavior; no production data is opened.
 """
 from dataclasses import FrozenInstanceError
 from datetime import date
-from decimal import Decimal, ROUND_HALF_EVEN, ROUND_UP, localcontext
+from decimal import ROUND_HALF_EVEN, ROUND_UP, Decimal, localcontext
 from pathlib import Path
 
 from django.db import connection
@@ -15,13 +15,16 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from apps.clientes_agenda.models import Cliente
-from apps.kanban_projetos.models import ProjetoKanban
 from apps.core_sistema.models import EventoSistema
 from apps.equipe.models import Funcionario
 from apps.financeiro.models import LancamentoFinanceiro
 from apps.financeiro.selectors import (
-    CustoFuncionario, EntradaPorForma, FechamentoMensal, fechamento_mensal,
+    CustoFuncionario,
+    EntradaPorForma,
+    FechamentoMensal,
+    fechamento_mensal,
 )
+from apps.kanban_projetos.models import ProjetoKanban
 
 D = Decimal
 FORMS = ('PIX', 'CARTAO_CREDITO', 'CARTAO_DEBITO', 'DINHEIRO', 'BOLETO')
@@ -38,16 +41,16 @@ ERRORS = {
 
 class MonthlyClosingTests(TestCase):
     def ledger(self, value='10.00', **overrides):
-        fields = dict(tipo='ENTRADA', categoria='SERVICO_CLIENTE',
-                      descricao='Fixture 111', valor=D(value), status='PAGO',
-                      data_pagamento=date(2024, 2, 10),
-                      data_vencimento=date(2024, 1, 1))
+        fields = {'tipo': 'ENTRADA', 'categoria': 'SERVICO_CLIENTE',
+                      'descricao': 'Fixture 111', 'valor': D(value), 'status': 'PAGO',
+                      'data_pagamento': date(2024, 2, 10),
+                      'data_vencimento': date(2024, 1, 1)}
         fields.update(overrides)
         return LancamentoFinanceiro.objects.create(**fields)
 
     def employee(self, name='Ana', **overrides):
-        fields = dict(nome=name, funcao='Marceneiro', periodicidade='DIARIA',
-                      valor_base=D('1.00'))
+        fields = {'nome': name, 'funcao': 'Marceneiro', 'periodicidade': 'DIARIA',
+                      'valor_base': D('1.00')}
         fields.update(overrides)
         return Funcionario.objects.create(**fields)
 
@@ -78,26 +81,26 @@ class MonthlyClosingTests(TestCase):
     def test_invalid_inputs_have_exact_order_messages_and_zero_queries(self):
         """Given invalid inputs, When selecting, Then reject before DB access."""
         cases = [
-            (True, 0, 'ano deve ser um inteiro.'),
-            (False, 2, 'ano deve ser um inteiro.'),
-            ('2024', 2, 'ano deve ser um inteiro.'),
-            (2024.0, 2, 'ano deve ser um inteiro.'),
-            (None, 2, 'ano deve ser um inteiro.'),
-            (0, False, 'ano deve estar entre 1 e 9999.'),
-            (10000, 2, 'ano deve estar entre 1 e 9999.'),
-            (-1, 2, 'ano deve estar entre 1 e 9999.'),
-            (2024, True, 'mes deve ser um inteiro.'),
-            (2024, False, 'mes deve ser um inteiro.'),
-            (2024, '2', 'mes deve ser um inteiro.'),
-            (2024, 2.0, 'mes deve ser um inteiro.'),
-            (2024, None, 'mes deve ser um inteiro.'),
-            (2024, 0, 'mes deve estar entre 1 e 12.'),
-            (2024, 13, 'mes deve estar entre 1 e 12.'),
-            (2024, -1, 'mes deve estar entre 1 e 12.'),
+            (TypeError, True, 0, 'ano deve ser um inteiro.'),
+            (TypeError, False, 2, 'ano deve ser um inteiro.'),
+            (TypeError, '2024', 2, 'ano deve ser um inteiro.'),
+            (TypeError, 2024.0, 2, 'ano deve ser um inteiro.'),
+            (TypeError, None, 2, 'ano deve ser um inteiro.'),
+            (ValueError, 0, False, 'ano deve estar entre 1 e 9999.'),
+            (ValueError, 10000, 2, 'ano deve estar entre 1 e 9999.'),
+            (ValueError, -1, 2, 'ano deve estar entre 1 e 9999.'),
+            (TypeError, 2024, True, 'mes deve ser um inteiro.'),
+            (TypeError, 2024, False, 'mes deve ser um inteiro.'),
+            (TypeError, 2024, '2', 'mes deve ser um inteiro.'),
+            (TypeError, 2024, 2.0, 'mes deve ser um inteiro.'),
+            (TypeError, 2024, None, 'mes deve ser um inteiro.'),
+            (ValueError, 2024, 0, 'mes deve estar entre 1 e 12.'),
+            (ValueError, 2024, 13, 'mes deve estar entre 1 e 12.'),
+            (ValueError, 2024, -1, 'mes deve estar entre 1 e 12.'),
         ]
-        for year, month, message in cases:
+        for error_type, year, month, message in cases:
             with self.subTest(year=year, month=month), self.assertNumQueries(0):
-                with self.assertRaises(ValueError) as caught:
+                with self.assertRaises(error_type) as caught:
                     fechamento_mensal(ano=year, mes=month)
                 self.assertEqual(str(caught.exception), message)
 
@@ -273,7 +276,7 @@ class MonthlyClosingTests(TestCase):
         bad = self.ledger()
         self.bypass(bad, 'status', 'INVALID')
         self.assert_error('date')
-        with self.assertNumQueries(0), self.assertRaisesMessage(ValueError, 'ano deve ser um inteiro.'):
+        with self.assertNumQueries(0), self.assertRaisesMessage(TypeError, 'ano deve ser um inteiro.'):
             fechamento_mensal(ano=True, mes=2)
 
     def test_relevant_choice_anomalies_exact_messages(self):
@@ -288,10 +291,10 @@ class MonthlyClosingTests(TestCase):
 
     def test_status_relevance_null_month_and_potential_debt(self):
         """Given invalid status, Then null/payment-month/potential-debt rows block."""
-        cases = [dict(data_pagamento=None, tipo='SAIDA', data_vencimento=date(2025, 1, 1)),
-                 dict(data_pagamento=date(2024, 2, 2), tipo='SAIDA'),
-                 dict(data_pagamento=date(2024, 3, 1)),
-                 dict(data_pagamento=date(2024, 1, 1))]
+        cases = [{'data_pagamento': None, 'tipo': 'SAIDA', 'data_vencimento': date(2025, 1, 1)},
+                 {'data_pagamento': date(2024, 2, 2), 'tipo': 'SAIDA'},
+                 {'data_pagamento': date(2024, 3, 1)},
+                 {'data_pagamento': date(2024, 1, 1)}]
         for fields in cases:
             with self.subTest(fields=fields):
                 row = self.ledger(**fields)

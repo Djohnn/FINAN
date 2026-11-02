@@ -4,7 +4,7 @@ Every corruption fixture asserts an in-memory Django test connection first.
 """
 from dataclasses import FrozenInstanceError, fields
 from datetime import date, datetime, timedelta
-from decimal import Decimal, ROUND_UP, localcontext
+from decimal import ROUND_UP, Decimal, localcontext
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,8 +15,8 @@ from django.utils import timezone
 
 from apps.clientes_agenda.models import Cliente
 from apps.core_sistema.models import EventoSistema
-from apps.financeiro.models import LancamentoFinanceiro
 from apps.financeiro import selectors
+from apps.financeiro.models import LancamentoFinanceiro
 from apps.kanban_projetos.models import ProjetoKanban
 
 D = Decimal
@@ -36,8 +36,8 @@ class CentralContasReceberTests(TestCase):
         self.assertNotEqual(Path(name), Path('C:/desenvolvimento/FinanEP/db.sqlite3'))
 
     def ledger(self, value='10.00', **overrides):
-        data = dict(tipo='ENTRADA', categoria='SERVICO_CLIENTE', descricao='Same text',
-                    valor=D(value), status='PENDENTE', data_vencimento=REF)
+        data = {'tipo': 'ENTRADA', 'categoria': 'SERVICO_CLIENTE', 'descricao': 'Same text',
+                    'valor': D(value), 'status': 'PENDENTE', 'data_vencimento': REF}
         data.update(overrides)
         return LancamentoFinanceiro.objects.create(**data)
 
@@ -344,8 +344,7 @@ class CentralContasReceberTests(TestCase):
             for _ in range(size):
                 self.ledger(projeto=self.project())
             with patch.object(ProjetoKanban, 'saldo_em_aberto',
-                              new_callable=property, fget=lambda _: self.fail('balance lookup')):
-                with CaptureQueriesContext(connection) as queries:
+                              new_callable=property, fget=lambda _: self.fail('balance lookup')), CaptureQueriesContext(connection) as queries:
                     result = self.central()
             self.assertEqual(len(queries), 1)
             sql = queries[0]['sql'].upper()

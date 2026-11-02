@@ -1,4 +1,5 @@
 from decimal import Decimal, InvalidOperation
+from typing import ClassVar
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -9,7 +10,7 @@ class Funcionario(models.Model):
     Cadastro de colaboradores e marceneiros da oficina.
     Controla periodicidade de pagamento e valor base.
     """
-    PERIODICIDADE_CHOICES = [
+    PERIODICIDADE_CHOICES: ClassVar[list[tuple[str, str]]] = [
         ('DIARIA', 'Diária'),
         ('SEMANAL', 'Semanal'),
         ('QUINZENAL', 'Quinzenal'),
@@ -52,7 +53,7 @@ class Funcionario(models.Model):
     class Meta:
         verbose_name = "Funcionário"
         verbose_name_plural = "Funcionários"
-        ordering = ["nome"]
+        ordering: ClassVar[list[str]] = ["nome"]
 
     def clean(self):
         valid_periodicidades = {
@@ -69,6 +70,7 @@ class Funcionario(models.Model):
     @classmethod
     def validate_monetary_magnitude(cls, field_name, value) -> Decimal:
         field = cls._meta.get_field(field_name)
+        assert isinstance(field, models.DecimalField)
         try:
             decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
         except (InvalidOperation, TypeError, ValueError) as exc:

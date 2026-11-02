@@ -41,13 +41,17 @@ def get_kanban_stage_labels() -> tuple[KanbanStageLabel, ...]:
     )
     overrides = {code: label for code, label, _position in configurations}
     flow_defaults = [stage for stage in defaults if stage.codigo_interno != ARCHIVED_STAGE_CODE]
-    positions = {code: position for code, _label, position in configurations if code != ARCHIVED_STAGE_CODE}
+    positions: dict[str, int | None] = {
+        code: position
+        for code, _label, position in configurations
+        if code != ARCHIVED_STAGE_CODE
+    }
     # Only a complete permutation is trusted; legacy/partial/corrupt data uses defaults.
     if (
         set(positions) == {stage.codigo_interno for stage in flow_defaults}
         and set(positions.values()) == set(range(len(flow_defaults)))
     ):
-        defaults = tuple(sorted(flow_defaults, key=lambda stage: positions[stage.codigo_interno])) + tuple(
+        defaults = tuple(sorted(flow_defaults, key=lambda stage: positions[stage.codigo_interno] or 0)) + tuple(
             stage for stage in defaults if stage.codigo_interno == ARCHIVED_STAGE_CODE
         )
     return tuple(

@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from django.db import models
 
 
@@ -116,7 +118,7 @@ class EventoSistema(models.Model):
     class Meta:
         verbose_name = 'Evento do Sistema'
         verbose_name_plural = 'Eventos do Sistema'
-        indexes = [
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(
                 fields=[
                     'dominio',
