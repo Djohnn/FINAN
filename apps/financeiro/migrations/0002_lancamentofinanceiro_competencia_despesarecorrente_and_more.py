@@ -1,5 +1,8 @@
+from typing import ClassVar
+
 import django.db.models.deletion
 from django.db import migrations, models
+from django.db.migrations.operations.base import Operation
 
 
 class Migration(migrations.Migration):

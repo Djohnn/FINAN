@@ -1,4 +1,7 @@
+from typing import ClassVar
+
 from django.db import migrations, models
+from django.db.migrations.operations.base import Operation
 
 DROP_PHASE7_TRIGGERS = (
     'DROP TRIGGER IF EXISTS financeiro_despesa_rec_criado_em_guard;',

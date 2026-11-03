@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
