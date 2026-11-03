@@ -1,8 +1,14 @@
 from decimal import Decimal, InvalidOperation
 from typing import ClassVar
+from zoneinfo import ZoneInfo
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import F, Q
+from django.db.models.constraints import BaseConstraint
+from django.utils import timezone
+
+RECORRENCIA_CUTOFF_TIMEZONE = ZoneInfo('America/Sao_Paulo')
 
 
 class LancamentoFinanceiro(models.Model):
@@ -10,6 +16,7 @@ class LancamentoFinanceiro(models.Model):
     Contas a pagar e receber unificadas da marcenaria.
     Base de cálculo para o Semáforo Financeiro e Fechamento do Mês.
     """
+
     foi_criado: bool
 
     TIPO_CHOICES: ClassVar[list[tuple[str, str]]] = [
@@ -43,13 +50,13 @@ class LancamentoFinanceiro(models.Model):
         max_length=10,
         choices=TIPO_CHOICES,
         db_index=True,
-        verbose_name="Tipo de Lançamento"
+        verbose_name="Tipo de Lançamento",
     )
     categoria = models.CharField(
         max_length=30,
         choices=CATEGORIA_CHOICES,
         db_index=True,
-        verbose_name="Categoria"
+        verbose_name="Categoria",
     )
     projeto = models.ForeignKey(
         'kanban_projetos.ProjetoKanban',
@@ -57,7 +64,7 @@ class LancamentoFinanceiro(models.Model):
         null=True,
         blank=True,
         related_name="lancamentos",
-        verbose_name="Projeto Relacionado"
+        verbose_name="Projeto Relacionado",
     )
     funcionario = models.ForeignKey(
         'equipe.Funcionario',
@@ -65,53 +72,102 @@ class LancamentoFinanceiro(models.Model):
         null=True,
         blank=True,
         related_name="pagamentos",
-        verbose_name="Funcionário Relacionado"
+        verbose_name="Funcionário Relacionado",
     )
+    recorrencia = models.ForeignKey(
+        'DespesaRecorrente',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='lancamentos',
+        verbose_name="Despesa Recorrente",
+    )  # type: ignore[var-annotated]
     descricao = models.CharField(
         max_length=200,
-        verbose_name="Descrição do Lançamento"
+        verbose_name="Descrição do Lançamento",
     )
     valor = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        verbose_name="Valor (R$)"
+        verbose_name="Valor (R$)",
     )
     forma_pagamento = models.CharField(
         max_length=20,
         choices=FORMA_PAGAMENTO_CHOICES,
         default='PIX',
-        verbose_name="Forma de Pagamento"
+        verbose_name="Forma de Pagamento",
     )
     data_vencimento = models.DateField(
         db_index=True,
-        verbose_name="Data de Vencimento"
+        verbose_name="Data de Vencimento",
     )
     data_pagamento = models.DateField(
         null=True,
         blank=True,
         db_index=True,
-        verbose_name="Data de Pagamento"
+        verbose_name="Data de Pagamento",
     )
     status = models.CharField(
         max_length=15,
         choices=STATUS_CHOICES,
         default='PENDENTE',
         db_index=True,
-        verbose_name="Status"
+        verbose_name="Status",
     )
+    competencia = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Competência",
+    )  # type: ignore[var-annotated]
 
     class Meta:
         verbose_name = "Lançamento Financeiro"
         verbose_name_plural = "Lançamentos Financeiros"
         ordering: ClassVar[list[str]] = ["-data_vencimento", "-id"]
+        constraints: ClassVar[list[BaseConstraint]] = [
+            models.UniqueConstraint(
+                fields=('recorrencia', 'competencia'),
+                name='financeiro_lanc_recorrencia_competencia_uniq',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(recorrencia__isnull=True, competencia__isnull=True)
+                    | Q(recorrencia__isnull=False, competencia__isnull=False)
+                ),
+                name='financeiro_lanc_recorrencia_competencia_pair',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(recorrencia__isnull=True)
+                    | Q(
+                        tipo='SAIDA',
+                        projeto__isnull=True,
+                        funcionario__isnull=True,
+                    )
+                ),
+                name='financeiro_lanc_recorrencia_invariants',
+            ),
+        ]
 
     @classmethod
-    def validar_valor_monetario(cls, valor, *, permitir_zero=False) -> Decimal:
+    def validar_valor_monetario(
+        cls,
+        valor,
+        *,
+        permitir_zero=False,
+        rejeitar_float_bool=False,
+    ) -> Decimal:
         """Valida centavos exatos, finitude, magnitude e sinal sem arredondar."""
+        if rejeitar_float_bool and isinstance(valor, (float, bool)):
+            raise ValidationError(
+                {'valor': 'Use Decimal ou texto decimal; float e bool não são aceitos.'}
+            )
         try:
             valor = valor if isinstance(valor, Decimal) else Decimal(str(valor))
         except (InvalidOperation, TypeError, ValueError) as exc:
-            raise ValidationError({'valor': 'Informe um valor monetário válido.'}) from exc
+            raise ValidationError(
+                {'valor': 'Informe um valor monetário válido.'}
+            ) from exc
         if not valor.is_finite():
             raise ValidationError({'valor': 'O valor deve ser finito.'})
         if valor < 0 or (valor == 0 and not permitir_zero):
@@ -122,7 +178,6 @@ class LancamentoFinanceiro(models.Model):
         field = cls._meta.get_field('valor')
         assert isinstance(field, models.DecimalField)
         _sign, digits, exponent = valor.as_tuple()
-        # Só dígitos não nulos além da escala exigiriam arredondamento.
         excess_places = -exponent - field.decimal_places
         if excess_places > 0 and any(digits[-excess_places:]):
             raise ValidationError({'valor': 'O valor deve ser exato em centavos.'})
@@ -148,12 +203,245 @@ class LancamentoFinanceiro(models.Model):
             self.valor = self.validar_valor_monetario(self.valor)
         except ValidationError as exc:
             errors.update(exc.message_dict)
+
+        has_recorrencia = self.recorrencia_id is not None
+        has_competencia = self.competencia is not None
+        if has_recorrencia:
+            recurring_invariants = {
+                'tipo': self.tipo == 'SAIDA',
+                'projeto': self.projeto_id is None,
+                'funcionario': self.funcionario_id is None,
+            }
+            recurring_invariant_messages = {
+                'tipo': 'Lançamentos recorrentes devem ser saídas.',
+                'projeto': 'Lançamentos recorrentes não podem ter projeto.',
+                'funcionario': 'Lançamentos recorrentes não podem ter funcionário.',
+            }
+            errors.update(
+                {
+                    field_name: recurring_invariant_messages[field_name]
+                    for field_name, valid in recurring_invariants.items()
+                    if not valid
+                }
+            )
+            if self._state.adding:
+                initial_invariants = {
+                    'status': self.status == 'PENDENTE',
+                    'data_pagamento': self.data_pagamento is None,
+                }
+                initial_invariant_messages = {
+                    'status': 'Lançamentos recorrentes devem iniciar pendentes.',
+                    'data_pagamento': (
+                        'Lançamentos recorrentes não podem iniciar quitados.'
+                    ),
+                }
+                errors.update(
+                    {
+                        field_name: initial_invariant_messages[field_name]
+                        for field_name, valid in initial_invariants.items()
+                        if not valid
+                    }
+                )
+
+        if has_recorrencia != has_competencia:
+            errors['competencia'] = (
+                'Recorrência e competência devem ser informadas juntas.'
+            )
+        elif has_competencia:
+            try:
+                self.competencia = self._meta.get_field('competencia').to_python(
+                    self.competencia
+                )
+            except ValidationError as exc:
+                errors['competencia'] = exc.messages
+            else:
+                if self.competencia is None or self.competencia.day != 1:
+                    errors['competencia'] = (
+                        'A competência deve ser o primeiro dia do mês.'
+                    )
+                elif self.recorrencia_id is not None:
+                    criado_em = self.recorrencia.criado_em
+                    if timezone.is_aware(criado_em):
+                        data_local = timezone.localtime(
+                            criado_em,
+                            RECORRENCIA_CUTOFF_TIMEZONE,
+                        ).date()
+                    else:
+                        data_local = criado_em.date()
+                    corte = data_local.replace(day=1)
+                    if self.competencia < corte:
+                        errors['competencia'] = (
+                            'A competência não pode anteceder o mês de criação '
+                            'da recorrência.'
+                        )
+
         if errors:
             raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
+        if self.pk:
+            persisted = type(self).objects.filter(pk=self.pk).values(
+                'recorrencia_id',
+                'competencia',
+            ).first()
+            if persisted and (
+                persisted['recorrencia_id'] != self.recorrencia_id
+                or persisted['competencia'] != self.competencia
+            ):
+                raise ValidationError(
+                    'A identidade de recorrência e competência não pode ser alterada.'
+                )
+        self.clean()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        if self.recorrencia_id is not None:
+            raise ValidationError(
+                'Lançamentos recorrentes não podem ser excluídos.'
+            )
+        return super().delete(*args, **kwargs)
+
+    def __str__(self):
+        return f"[{self.get_tipo_display()}] {self.descricao} - R$ {self.valor}"
+
+
+class DespesaRecorrente(models.Model):
+    CATEGORIA_CHOICES: ClassVar[list[tuple[str, str]]] = (
+        LancamentoFinanceiro.CATEGORIA_CHOICES
+    )
+    FORMA_PAGAMENTO_CHOICES: ClassVar[list[tuple[str, str]]] = (
+        LancamentoFinanceiro.FORMA_PAGAMENTO_CHOICES
+    )
+
+    descricao = models.CharField(
+        max_length=200,
+        verbose_name="Descrição",
+    )  # type: ignore[var-annotated]
+    categoria = models.CharField(
+        max_length=30,
+        choices=CATEGORIA_CHOICES,
+        verbose_name="Categoria",
+    )  # type: ignore[var-annotated]
+    valor = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Valor (R$)",
+    )  # type: ignore[var-annotated]
+    forma_pagamento = models.CharField(
+        max_length=20,
+        choices=FORMA_PAGAMENTO_CHOICES,
+        default='PIX',
+        verbose_name="Forma de Pagamento",
+    )  # type: ignore[var-annotated]
+    dia_vencimento = models.PositiveSmallIntegerField(
+        verbose_name="Dia de Vencimento",
+    )  # type: ignore[var-annotated]
+    data_inicio = models.DateField(
+        verbose_name="Data de Início",
+    )  # type: ignore[var-annotated]
+    data_fim = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Data de Fim",
+    )  # type: ignore[var-annotated]
+    ativo = models.BooleanField(
+        default=True,
+        verbose_name="Ativa",
+    )  # type: ignore[var-annotated]
+    observacao = models.TextField(
+        blank=True,
+        verbose_name="Observação",
+    )  # type: ignore[var-annotated]
+    criado_em = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Criada em",
+    )  # type: ignore[var-annotated]
+
+    class Meta:
+        verbose_name = "Despesa Recorrente"
+        verbose_name_plural = "Despesas Recorrentes"
+        ordering: ClassVar[list[str]] = [
+            '-ativo',
+            'dia_vencimento',
+            'descricao',
+            'id',
+        ]
+        constraints: ClassVar[list[BaseConstraint]] = [
+            models.CheckConstraint(
+                condition=Q(valor__gt=0),
+                name='financeiro_despesa_rec_valor_positivo',
+            ),
+            models.CheckConstraint(
+                condition=Q(dia_vencimento__gte=1, dia_vencimento__lte=31),
+                name='financeiro_despesa_rec_dia_1_31',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(data_fim__isnull=True)
+                    | Q(data_fim__gte=F('data_inicio'))
+                ),
+                name='financeiro_despesa_rec_datas_coerentes',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.categoria not in {
+            key for key, _label in self.CATEGORIA_CHOICES
+        }:
+            errors['categoria'] = 'Escolha inválida.'
+        if self.forma_pagamento not in {
+            key for key, _label in self.FORMA_PAGAMENTO_CHOICES
+        }:
+            errors['forma_pagamento'] = 'Escolha inválida.'
+        try:
+            self.valor = LancamentoFinanceiro.validar_valor_monetario(
+                self.valor,
+                rejeitar_float_bool=True,
+            )
+        except ValidationError as exc:
+            errors.update(exc.message_dict)
+
+        try:
+            inicio = self._meta.get_field('data_inicio').to_python(
+                self.data_inicio
+            )
+        except ValidationError as exc:
+            errors['data_inicio'] = exc.messages
+            inicio = None
+
+        try:
+            fim = self._meta.get_field('data_fim').to_python(self.data_fim)
+        except ValidationError as exc:
+            errors['data_fim'] = exc.messages
+            fim = None
+
+        if self.data_inicio is None:
+            errors['data_inicio'] = 'Informe a data de início.'
+        if self.dia_vencimento is None or not 1 <= self.dia_vencimento <= 31:
+            errors['dia_vencimento'] = (
+                'O dia de vencimento deve estar entre 1 e 31.'
+            )
+        if fim is not None and inicio is not None and fim < inicio:
+            errors['data_fim'] = (
+                'A data de fim deve ser posterior ou igual à data de início.'
+            )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            persisted = type(self).objects.filter(pk=self.pk).values(
+                'criado_em'
+            ).first()
+            if persisted and persisted['criado_em'] != self.criado_em:
+                raise ValidationError(
+                    {'criado_em': 'A data de criação não pode ser alterada.'}
+                )
         self.clean()
         return super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"[{self.get_tipo_display()}] {self.descricao} - R$ {self.valor}"
+        return f"{self.descricao} — R$ {self.valor}"
