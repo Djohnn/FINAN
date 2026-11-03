@@ -8,18 +8,75 @@
     <link rel="icon" href="{% url 'favicon' %}" type="image/svg+xml">
     <link rel="stylesheet" href="{% static 'core_sistema/global_alerts.css' %}">
     {% block styles %}{% endblock %}
+    <link rel="stylesheet" href="{% static 'core_sistema/global_header.css' %}">
 </head>
 <body class="app-body">
-    <header class="site-header">
-        <div class="site-header__inner">
-            <div class="brand-mark" aria-label="FinanPE">
-                <span class="brand-mark__dot" aria-hidden="true"></span>
-                <span>FinanPE</span>
+    {% with current_namespace=request.resolver_match.namespace current_url_name=request.resolver_match.url_name %}
+        <header class="global-header">
+            <div class="global-header__inner">
+                <a class="global-header__brand" href="{% url 'clientes_agenda:clientes' %}" aria-label="FinanPE · Gestão da marcenaria">
+                    <span class="global-header__brand-mark" aria-hidden="true"></span>
+                    <span class="global-header__brand-name">FinanPE</span>
+                    <span class="global-header__brand-context">Gestão da marcenaria</span>
+                </a>
+
+                <button
+                    class="global-header__toggle"
+                    type="button"
+                    data-global-menu-toggle
+                    aria-controls="global-navigation"
+                    aria-expanded="false"
+                >
+                    <span class="global-header__toggle-icon" aria-hidden="true"><span></span><span></span><span></span></span>
+                    <span class="global-header__toggle-label">Menu</span>
+                </button>
+
+                <nav id="global-navigation" class="global-header__nav" aria-label="Navegação global" hidden>
+                    <span class="global-header__mobile-label">NAVEGAÇÃO GLOBAL</span>
+                    <a
+                        href="{% url 'clientes_agenda:clientes' %}"
+                        class="global-header__link{% if current_namespace == 'clientes_agenda' %} is-active{% endif %}"
+                        {% if current_namespace == 'clientes_agenda' %}aria-current="page"{% endif %}
+                    >
+                        Clientes
+                    </a>
+                    <a
+                        href="{% url 'kanban_projetos:kanban_readonly' %}"
+                        class="global-header__link{% if current_namespace == 'kanban_projetos' %} is-active{% endif %}"
+                        {% if current_namespace == 'kanban_projetos' %}aria-current="page"{% endif %}
+                    >
+                        Projetos
+                    </a>
+                    <details
+                        class="global-header__finance"
+                        {% if current_namespace == 'financeiro' %}open data-global-finance-active="true"{% endif %}
+                    >
+                        <summary
+                            class="global-header__finance-trigger{% if current_namespace == 'financeiro' %} is-active{% endif %}"
+                            {% if current_namespace == 'financeiro' %}aria-current="page"{% endif %}
+                        >
+                            <span>Financeiro</span>
+                            <span class="global-header__chevron" aria-hidden="true">⌄</span>
+                        </summary>
+                        <div id="global-finance-menu" class="global-header__finance-menu">
+                            <a
+                                href="{% url 'financeiro:central_contas_receber' %}"
+                                {% if current_url_name == 'central_contas_receber' %}aria-current="page"{% endif %}
+                            >
+                                A receber
+                            </a>
+                            <a
+                                href="{% url 'financeiro:rentabilidade_projetos' %}"
+                                {% if current_url_name == 'rentabilidade_projetos' or current_url_name == 'rentabilidade_projeto' %}aria-current="page"{% endif %}
+                            >
+                                Rentabilidade
+                            </a>
+                        </div>
+                    </details>
+                </nav>
             </div>
-            <span class="site-context">Gestão da marcenaria</span>
-            {% block header_nav %}{% endblock %}
-        </div>
-    </header>
+        </header>
+    {% endwith %}
     {% if orcamentos_atrasados_count %}
         <div
             class="global-budget-alert"
@@ -42,6 +99,7 @@
     <main id="conteudo-principal">
         {% block content %}{% endblock %}
     </main>
+    <script src="{% static 'core_sistema/global_header.js' %}" defer></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

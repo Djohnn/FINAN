@@ -7,13 +7,6 @@
     <link rel="stylesheet" href="{% static 'financeiro/project_profitability.css' %}">
 {% endblock %}
 
-{% block header_nav %}
-    <nav class="topnav" aria-label="Navegação financeira">
-        <a class="topnav__link topnav__link--active" href="{% url 'financeiro:rentabilidade_projetos' %}" aria-current="page">Projetos</a>
-        <a class="topnav__link" href="{% url 'financeiro:central_contas_receber' %}">A receber</a>
-    </nav>
-{% endblock %}
-
 {% block content %}
 <div class="page-shell profitability-shell">
     <section class="page-intro" aria-labelledby="page-title">

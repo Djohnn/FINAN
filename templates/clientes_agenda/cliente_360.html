@@ -7,12 +7,6 @@
     <link rel="stylesheet" href="{% static 'clientes_agenda/customer360.css' %}">
 {% endblock %}
 
-{% block header_nav %}
-    <nav class="site-nav" aria-label="Navegação principal">
-        <a class="site-nav__link site-nav__link--active" href="{% url 'clientes_agenda:clientes' %}">Clientes</a>
-    </nav>
-{% endblock %}
-
 {% block content %}
     <div class="customer-shell">
         <nav class="customer-breadcrumb" aria-label="Breadcrumb">

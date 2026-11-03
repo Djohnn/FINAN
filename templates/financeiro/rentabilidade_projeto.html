@@ -7,13 +7,6 @@
     <link rel="stylesheet" href="{% static 'financeiro/project_profitability.css' %}">
 {% endblock %}
 
-{% block header_nav %}
-    <nav class="topnav" aria-label="Navegação financeira">
-        <a class="topnav__link" href="{% url 'financeiro:rentabilidade_projetos' %}">Projetos</a>
-        <a class="topnav__link topnav__link--active" href="{% if available %}{% url 'financeiro:rentabilidade_projeto' projeto_id=project.result.projeto_id %}{% else %}#{% endif %}"{% if available %} aria-current="page"{% endif %}>Detalhe</a>
-    </nav>
-{% endblock %}
-
 {% block content %}
 <div class="page-shell page-shell--detail profitability-shell">
     <a class="back-link" href="{% url 'financeiro:rentabilidade_projetos' %}"><span aria-hidden="true">←</span> Voltar para todos os projetos</a>
