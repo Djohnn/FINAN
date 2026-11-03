@@ -8,8 +8,8 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
-from django.db.models.deletion import ProtectedError
 from django.db.migrations.executor import MigrationExecutor
+from django.db.models.deletion import ProtectedError
 from django.test import Client, RequestFactory, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -94,7 +94,7 @@ class DespesaRecorrenteModelTests(TestCase):
             1.23,
             True,
             False,
-            Decimal('0'),
+            Decimal(0),
             Decimal('-0.01'),
             Decimal('1.234'),
             Decimal('NaN'),
@@ -154,11 +154,10 @@ class DespesaRecorrenteModelTests(TestCase):
             ),
             1,
         )
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                DespesaRecorrente.objects.filter(pk=recorrencia.pk).update(
-                    criado_em=criado_em - timedelta(days=1),
-                )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DespesaRecorrente.objects.filter(pk=recorrencia.pk).update(
+                criado_em=criado_em - timedelta(days=1),
+            )
         recorrencia.refresh_from_db()
         self.assertEqual(recorrencia.criado_em, criado_em)
 
@@ -313,9 +312,12 @@ class LedgerRecurrenceModelTests(TestCase):
             {'funcionario': funcionario},
         )
         for values in updates:
-            with self.subTest(values=values), self.assertRaises(IntegrityError):
-                with transaction.atomic():
-                    LancamentoFinanceiro.objects.filter(pk=row.pk).update(**values)
+            with (
+                self.subTest(values=values),
+                self.assertRaises(IntegrityError),
+                transaction.atomic(),
+            ):
+                LancamentoFinanceiro.objects.filter(pk=row.pk).update(**values)
             row.refresh_from_db()
 
     def test_competence_must_be_first_day_and_february_is_valid(self):
@@ -440,17 +442,15 @@ class LedgerRecurrenceModelTests(TestCase):
         row.save(update_fields=['status'])
         with self.assertRaises(ValidationError):
             row.delete()
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                LancamentoFinanceiro.objects.filter(pk=row.pk).delete()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            LancamentoFinanceiro.objects.filter(pk=row.pk).delete()
         self.assertTrue(LancamentoFinanceiro.objects.filter(pk=row.pk).exists())
 
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                LancamentoFinanceiro.objects.filter(pk=row.pk).update(
-                    recorrencia=None,
-                    competencia=None,
-                )
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            LancamentoFinanceiro.objects.filter(pk=row.pk).update(
+                recorrencia=None,
+                competencia=None,
+            )
 
     def test_legacy_ledger_can_be_deleted_and_recurrence_is_protected(self):
         legacy = LancamentoFinanceiro.objects.create(**self._kwargs())

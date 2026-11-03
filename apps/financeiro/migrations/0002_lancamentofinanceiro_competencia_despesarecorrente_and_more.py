@@ -4,13 +4,13 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    dependencies: ClassVar[list[tuple[str, str]]] = [
+    dependencies: ClassVar[list[tuple[str, str]]] = [  # noqa: RUF012
         ('equipe', '0001_initial'),
         ('financeiro', '0001_initial'),
         ('kanban_projetos', '0003_configuracaoetapakanban_posicao_visual'),
     ]
 
-    operations: ClassVar[list[Operation]] = [
+    operations: ClassVar[list[Operation]] = [  # noqa: RUF012
         migrations.AddField(
             model_name='lancamentofinanceiro',
             name='competencia',

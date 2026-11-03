@@ -1,6 +1,5 @@
 from django.db import migrations, models
 
-
 DROP_PHASE7_TRIGGERS = (
     'DROP TRIGGER IF EXISTS financeiro_despesa_rec_criado_em_guard;',
     'DROP TRIGGER IF EXISTS financeiro_lanc_recorrente_origin_guard;',
@@ -101,11 +100,11 @@ CREATE_PHASE7_TRIGGERS = (
 
 
 class Migration(migrations.Migration):
-    dependencies: ClassVar[list[tuple[str, str]]] = [
+    dependencies: ClassVar[list[tuple[str, str]]] = [  # noqa: RUF012
         ('financeiro', '0002_lancamentofinanceiro_competencia_despesarecorrente_and_more'),
     ]
 
-    operations: ClassVar[list[Operation]] = [
+    operations: ClassVar[list[Operation]] = [  # noqa: RUF012
         migrations.RunSQL(
             sql=DROP_PHASE7_TRIGGERS,
             reverse_sql=CREATE_PHASE7_TRIGGERS,
