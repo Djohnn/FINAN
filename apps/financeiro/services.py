@@ -76,7 +76,7 @@ def _recorrencia_elegivel_para_competencia(
     competencia: date,
     data_vencimento: date,
 ) -> bool:
-    """Aplica limites de mês e bloqueia as duas fronteiras ainda sem política."""
+    """Aplica as políticas de elegibilidade das datas de início e fim."""
     if not recorrencia.ativo:
         return False
 
@@ -84,14 +84,7 @@ def _recorrencia_elegivel_para_competencia(
     if competencia < inicio_competencia:
         return False
     if competencia == inicio_competencia and data_vencimento < recorrencia.data_inicio:
-        raise ValidationError(
-            {
-                'competencia': (
-                    'A política para vencimento anterior à data de início '
-                    'no mesmo mês ainda não foi definida.'
-                )
-            }
-        )
+        return False
 
     if recorrencia.data_fim is None:
         return True
@@ -100,16 +93,7 @@ def _recorrencia_elegivel_para_competencia(
     if competencia > fim_competencia:
         return False
     if competencia == fim_competencia:
-        ultimo_dia = monthrange(competencia.year, competencia.month)[1]
-        if recorrencia.data_fim.day != ultimo_dia:
-            raise ValidationError(
-                {
-                    'competencia': (
-                        'A política para competência no mês de uma data de fim '
-                        'intermediária ainda não foi definida.'
-                    )
-                }
-            )
+        return data_vencimento <= recorrencia.data_fim
     return True
 
 

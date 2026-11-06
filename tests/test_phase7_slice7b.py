@@ -119,12 +119,19 @@ class MonthlyRecurringGeneratorTests(TestCase):
         row = self._generate(recorrencia, date(2026, 11, 1))
         row.status = 'CANCELADO'
         row.save(update_fields=['status'])
+        original = LancamentoFinanceiro.objects.get(pk=row.pk)
+
+        recorrencia.valor = Decimal('400.00')
+        recorrencia.dia_vencimento = 31
+        recorrencia.save()
 
         retry = self._generate(recorrencia, date(2026, 11, 1))
 
         self.assertFalse(retry.foi_criado)
-        self.assertEqual(retry.pk, row.pk)
+        self.assertEqual(retry.pk, original.pk)
         self.assertEqual(retry.status, 'CANCELADO')
+        self.assertEqual(retry.valor, original.valor)
+        self.assertEqual(retry.data_vencimento, original.data_vencimento)
         self.assertEqual(LancamentoFinanceiro.objects.count(), 1)
 
     def test_edited_recurrence_only_affects_future_competences(self):
@@ -148,19 +155,24 @@ class MonthlyRecurringGeneratorTests(TestCase):
         self.assertEqual(december.valor, Decimal('310.25'))
         self.assertEqual(december.data_vencimento, date(2026, 12, 31))
 
-    def test_clamps_day_31_to_month_end(self):
+    def test_clamps_days_29_30_and_31_to_month_end(self):
         cases = (
-            (date(2027, 2, 1), date(2027, 2, 28)),
-            (date(2028, 2, 1), date(2028, 2, 29)),
-            (date(2027, 4, 1), date(2027, 4, 30)),
-            (date(2027, 6, 1), date(2027, 6, 30)),
-            (date(2027, 9, 1), date(2027, 9, 30)),
-            (date(2027, 11, 1), date(2027, 11, 30)),
-            (date(2027, 1, 1), date(2027, 1, 31)),
+            (29, date(2027, 2, 1), date(2027, 2, 28)),
+            (29, date(2028, 2, 1), date(2028, 2, 29)),
+            (30, date(2027, 2, 1), date(2027, 2, 28)),
+            (30, date(2028, 2, 1), date(2028, 2, 29)),
+            (31, date(2027, 2, 1), date(2027, 2, 28)),
+            (31, date(2028, 2, 1), date(2028, 2, 29)),
+            (29, date(2027, 4, 1), date(2027, 4, 29)),
+            (30, date(2027, 4, 1), date(2027, 4, 30)),
+            (31, date(2027, 4, 1), date(2027, 4, 30)),
+            (29, date(2027, 1, 1), date(2027, 1, 29)),
+            (30, date(2027, 1, 1), date(2027, 1, 30)),
+            (31, date(2027, 1, 1), date(2027, 1, 31)),
         )
-        for competencia, expected_due in cases:
-            with self.subTest(competencia=competencia):
-                recorrencia = create_recorrencia(dia_vencimento=31)
+        for due_day, competencia, expected_due in cases:
+            with self.subTest(due_day=due_day, competencia=competencia):
+                recorrencia = create_recorrencia(dia_vencimento=due_day)
 
                 lancamento = self._generate(recorrencia, competencia)
 
@@ -218,18 +230,53 @@ class MonthlyRecurringGeneratorTests(TestCase):
             LancamentoFinanceiro.objects.filter(recorrencia=recorrencia).exists()
         )
 
-    def test_due_date_before_start_date_in_same_month_is_blocked(self):
+    def test_due_date_before_start_date_in_same_month_skips_generation(self):
         recorrencia = create_recorrencia(
             dia_vencimento=5,
             data_inicio=date(2026, 11, 10),
         )
 
-        with self.assertRaises(ValidationError):
-            self._generate(recorrencia, date(2026, 11, 1))
+        result = self._generate(recorrencia, date(2026, 11, 1))
 
+        self.assertIsNone(result)
         self.assertFalse(
             LancamentoFinanceiro.objects.filter(recorrencia=recorrencia).exists()
         )
+
+    def test_next_competence_after_start_month_can_generate(self):
+        recorrencia = create_recorrencia(
+            dia_vencimento=10,
+            data_inicio=date(2026, 11, 20),
+        )
+
+        initial = self._generate(recorrencia, date(2026, 11, 1))
+        following = self._generate(recorrencia, date(2026, 12, 1))
+
+        self.assertIsNone(initial)
+        self.assertTrue(following.foi_criado)
+        self.assertEqual(following.data_vencimento, date(2026, 12, 10))
+
+    def test_start_date_day_equal_to_due_date_generates_initial_competence(self):
+        recorrencia = create_recorrencia(
+            dia_vencimento=10,
+            data_inicio=date(2026, 11, 10),
+        )
+
+        result = self._generate(recorrencia, date(2026, 11, 1))
+
+        self.assertTrue(result.foi_criado)
+        self.assertEqual(result.data_vencimento, date(2026, 11, 10))
+
+    def test_start_date_day_before_due_date_generates_initial_competence(self):
+        recorrencia = create_recorrencia(
+            dia_vencimento=20,
+            data_inicio=date(2026, 11, 10),
+        )
+
+        result = self._generate(recorrencia, date(2026, 11, 1))
+
+        self.assertTrue(result.foi_criado)
+        self.assertEqual(result.data_vencimento, date(2026, 11, 20))
 
     def test_competence_after_end_month_does_not_generate(self):
         recorrencia = create_recorrencia(data_fim=date(2026, 10, 31))
@@ -241,15 +288,40 @@ class MonthlyRecurringGeneratorTests(TestCase):
             LancamentoFinanceiro.objects.filter(recorrencia=recorrencia).exists()
         )
 
-    def test_intermediate_end_date_in_target_month_is_blocked(self):
-        recorrencia = create_recorrencia(data_fim=date(2026, 11, 15))
+    def test_due_date_on_or_before_end_date_generates_final_competence(self):
+        recorrencia = create_recorrencia(
+            dia_vencimento=10,
+            data_fim=date(2026, 11, 15),
+        )
 
-        with self.assertRaises(ValidationError):
-            self._generate(recorrencia, date(2026, 11, 1))
+        result = self._generate(recorrencia, date(2026, 11, 1))
 
+        self.assertTrue(result.foi_criado)
+        self.assertEqual(result.data_vencimento, date(2026, 11, 10))
+
+    def test_due_date_after_end_date_skips_final_competence(self):
+        recorrencia = create_recorrencia(
+            dia_vencimento=20,
+            data_fim=date(2026, 11, 15),
+        )
+
+        result = self._generate(recorrencia, date(2026, 11, 1))
+
+        self.assertIsNone(result)
         self.assertFalse(
             LancamentoFinanceiro.objects.filter(recorrencia=recorrencia).exists()
         )
+
+    def test_competence_before_end_month_still_generates(self):
+        recorrencia = create_recorrencia(
+            dia_vencimento=20,
+            data_fim=date(2026, 11, 15),
+        )
+
+        result = self._generate(recorrencia, date(2026, 10, 1))
+
+        self.assertTrue(result.foi_criado)
+        self.assertEqual(result.data_vencimento, date(2026, 10, 20))
 
     def test_generation_failure_leaves_no_partial_ledger_row(self):
         recorrencia = create_recorrencia()
@@ -359,21 +431,46 @@ class MonthlyRecurringGeneratorTests(TestCase):
             ).exists()
         )
 
-    def test_monthly_service_blocks_ambiguous_end_month(self):
-        recorrencia = create_recorrencia(data_fim=date(2026, 11, 15))
+    def test_monthly_service_skips_due_date_after_end_date(self):
+        recorrencia = create_recorrencia(
+            dia_vencimento=20,
+            data_fim=date(2026, 11, 15),
+        )
         monthly_service = self._service(
             'gerar_despesas_recorrentes_mes_atual_service'
         )
 
+        with patch(
+            'apps.financeiro.services.timezone.localdate',
+            return_value=date(2026, 11, 3),
+        ):
+            result = monthly_service()
+
+        self.assertEqual(result, [])
+        self.assertFalse(
+            LancamentoFinanceiro.objects.filter(recorrencia=recorrencia).exists()
+        )
+
+    def test_create_service_does_not_backfill_previous_competences(self):
+        create_service = self._service('criar_despesa_recorrente_service')
         with (
             patch(
                 'apps.financeiro.services.timezone.localdate',
-                return_value=date(2026, 11, 3),
+                return_value=date(2026, 11, 20),
             ),
-            self.assertRaises(ValidationError),
+            patch('django.utils.timezone.now', return_value=FIXED_CREATED_AT),
         ):
-            monthly_service()
+            recorrencia = create_service(
+                **self._creation_data(
+                    dia_vencimento=10,
+                    data_inicio=date(2026, 9, 20),
+                )
+            )
 
-        self.assertFalse(
-            LancamentoFinanceiro.objects.filter(recorrencia=recorrencia).exists()
+        self.assertEqual(
+            list(
+                LancamentoFinanceiro.objects.filter(recorrencia=recorrencia)
+                .values_list('competencia', flat=True)
+            ),
+            [date(2026, 11, 1)],
         )
