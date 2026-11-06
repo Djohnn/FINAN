@@ -408,6 +408,105 @@ class MonthlyRecurringGeneratorTests(TestCase):
             date(2026, 11, 1),
         )
 
+    def test_monthly_service_continues_after_ineligible_recurrence(self):
+        ineligible = create_recorrencia(
+            descricao='Ainda não iniciada',
+            dia_vencimento=10,
+            data_inicio=date(2026, 11, 20),
+        )
+        eligible = create_recorrencia(descricao='Elegível')
+        monthly_service = self._service(
+            'gerar_despesas_recorrentes_mes_atual_service'
+        )
+
+        with patch(
+            'apps.financeiro.services.timezone.localdate',
+            return_value=date(2026, 11, 3),
+        ):
+            first_run = monthly_service()
+            second_run = monthly_service()
+
+        self.assertEqual(len(first_run), 1)
+        self.assertTrue(first_run[0].foi_criado)
+        self.assertEqual(first_run[0].recorrencia_id, eligible.pk)
+        self.assertEqual(first_run[0].competencia, date(2026, 11, 1))
+        self.assertEqual(first_run[0].status, 'PENDENTE')
+        self.assertFalse(
+            LancamentoFinanceiro.objects.filter(recorrencia=ineligible).exists()
+        )
+        self.assertEqual(
+            LancamentoFinanceiro.objects.filter(recorrencia=eligible).count(),
+            1,
+        )
+        self.assertEqual(len(second_run), 1)
+        self.assertFalse(second_run[0].foi_criado)
+        self.assertEqual(second_run[0].pk, first_run[0].pk)
+        self.assertEqual(LancamentoFinanceiro.objects.count(), 1)
+
+    def test_monthly_service_rolls_back_when_second_generation_fails(self):
+        first = create_recorrencia(descricao='Primeira')
+        second = create_recorrencia(descricao='Segunda')
+        preexisting_recurrencia = create_recorrencia(descricao='Preexistente')
+        preexisting = self._generate(
+            preexisting_recurrencia,
+            date(2026, 11, 1),
+        )
+        preexisting.status = 'PAGO'
+        preexisting.data_pagamento = date(2026, 11, 11)
+        preexisting.save(update_fields=['status', 'data_pagamento'])
+        preexisting_snapshot = (
+            preexisting.pk,
+            preexisting.status,
+            preexisting.data_pagamento,
+            preexisting.valor,
+            preexisting.data_vencimento,
+        )
+        monthly_service = self._service(
+            'gerar_despesas_recorrentes_mes_atual_service'
+        )
+        original_get_or_create = LancamentoFinanceiro.objects.get_or_create
+        calls = 0
+
+        def fail_on_second_generation(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError('falha na segunda recorrência')
+            return original_get_or_create(*args, **kwargs)
+
+        with (
+            patch(
+                'apps.financeiro.services.timezone.localdate',
+                return_value=date(2026, 11, 3),
+            ),
+            patch(
+                'apps.financeiro.services.LancamentoFinanceiro.objects.get_or_create',
+                side_effect=fail_on_second_generation,
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            monthly_service()
+
+        self.assertEqual(calls, 2)
+        self.assertFalse(
+            LancamentoFinanceiro.objects.filter(recorrencia=first).exists()
+        )
+        self.assertFalse(
+            LancamentoFinanceiro.objects.filter(recorrencia=second).exists()
+        )
+        self.assertEqual(LancamentoFinanceiro.objects.count(), 1)
+        preexisting.refresh_from_db()
+        self.assertEqual(
+            (
+                preexisting.pk,
+                preexisting.status,
+                preexisting.data_pagamento,
+                preexisting.valor,
+                preexisting.data_vencimento,
+            ),
+            preexisting_snapshot,
+        )
+
     def test_monthly_service_skips_future_start_and_expired_recurrence(self):
         future = create_recorrencia(data_inicio=date(2026, 12, 1))
         expired = create_recorrencia(
