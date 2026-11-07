@@ -76,6 +76,15 @@ Usar **exatamente** a notação operacional solicitada:
 | Testes registrados no checkpoint remoto | `701 PASS` | Baseline **reportado/documentado**, não reexecutado nesta revisão |
 | Testes do candidato local | `709 PASS` | Reportados pelo implementador, ainda aguardam reauditoria do Agente 199 |
 
+**Referências históricas da revisão documental:**
+
+```text
+MAIN_VALIDATION_HEAD_SHA=6d4decb04cd1ed10940c4bfdb7a4f874104bee13
+MAIN_VALIDATION_PRODUCT_SHA=863b5a3895f2b029ebc342c48248ac9c97cd645f
+```
+
+`MAIN_VALIDATION_HEAD_SHA` é o HEAD histórico de `main-validation` e inclui checkpoints documentais posteriores. `MAIN_VALIDATION_PRODUCT_SHA` corresponde ao gerador 7B integrado. Ambos são referências históricas desta revisão; nenhum representa promoção da Fase 7 para `main`.
+
 **Limites de evidência:** a revisão confirmou arquivos, código, rotas, estrutura de commits e documentação remotos. Não executou o aplicativo no Windows, não inspecionou banco real e não presume que candidatos locais tenham sido enviados ao GitHub.
 
 ---
@@ -446,7 +455,17 @@ Esta seção evita apresentar um backend integrado como se todas as ações do u
 
 **Não implementar por inferência:** assinatura eletrônica, comunicação cloud automática, autorização multiusuário, modelos/migrations ou alteração automática de valores do projeto ao salvar um documento.
 
-**Fonte:** `FINANPE_CONTRATOS_PROPOSTA_FUNCIONAL.md` fornecido pelo Founder; não encontrado versionado no snapshot do GitHub consultado.
+**Proveniência do documento externo (evidência fornecida pelo Coordenador):**
+
+```text
+SOURCE_DOCUMENT=FINANPE_CONTRATOS_PROPOSTA_FUNCIONAL.md
+SOURCE_SHA256=191284dd6445f9e2cd1589bbdcce9be23599d09a1ad9b3369178807e914f1ca2
+SOURCE_ORIGIN=Documento fornecido pelo Founder ao contexto FinanPE.
+SOURCE_APPROVAL=DOCUMENT_ONLY; FOUNDER_VISUAL_APPROVAL_PENDING.
+LOCAL_BYTE_VERIFICATION=NOT_VERIFIED
+```
+
+O hash acima é preservado como evidência fornecida pelo Coordenador. A verificação local dos bytes do documento externo no Windows permanece `NOT_VERIFIED`. Este registro não afirma que o documento externo esteja versionado no GitHub nem que tenha sido auditado independentemente.
 
 ---
 
